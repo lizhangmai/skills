@@ -8,7 +8,17 @@ description: Manage local self-use conda channels and conda package supply-chain
 ## Operating Rules
 
 - Treat this as a `rattler-build` supply-chain skill, not a circuit-only builder.
+- Own conda package artifacts, recipe rendering/building/testing/inspection, and
+  local channel maintenance. Do not create user application pixi projects or
+  install PyPI `monata`; that belongs to `monata-sim-env`.
 - Before running a build or rebuild, require the user to provide `CONDA_BUILD_OUTPUT_DIR`, `CONDA_BLD_PATH`, or `--output-dir` for the final artifact channel. Do not invent a default output directory. If the user did not specify one, ask for it before executing build or test commands.
+- Check an existing output channel before building when the caller wants reuse.
+  Use `check-channel`, then build only missing packages with `--skip-existing`
+  unless the user explicitly requests a rebuild.
+- Do not silently install host tools. If `rattler-build` is missing, report it.
+  When `pixi` is available, offer to run through
+  `--rattler-build "pixi exec rattler-build"` only after the user confirms that
+  temporary pixi tool download.
 - Use `https://prefix.dev/conda-forge` as the default dependency channel unless explicit `--channel` values are given.
 - When building for a Monata runtime environment, build only the packages the
   requested workflow needs. The current Monata baseline is `ngspice` plus
@@ -43,8 +53,21 @@ Render or build the current Monata baseline from the bundled recipe set:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
+python3 scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --render-only
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r
+python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
+```
+
+If `rattler-build` is missing and the user approves using pixi for the build
+tool, pass an explicit command prefix:
+
+```bash
+python3 scripts/rattler_channel.py build \
+  --recipe-set circuit-toolchain \
+  --package ngspice \
+  --package openvaf-r \
+  --skip-existing \
+  --rattler-build "pixi exec rattler-build"
 ```
 
 Build larger dependency sets only when explicitly requested:
@@ -97,7 +120,7 @@ python3 scripts/test_circuit_artifacts.py
 
 ## Resources
 
-- `scripts/rattler_channel.py`: thin wrapper for local recipe sets, package testing, package inspection, recipe generation, version bumps, rebuilds, and raw `rattler-build` passthrough.
+- `scripts/rattler_channel.py`: thin wrapper for local recipe sets, output-channel reuse checks, package testing, package inspection, recipe generation, version bumps, rebuilds, and raw `rattler-build` passthrough.
 - `scripts/test_circuit_artifacts.py`: pixi-based installed-artifact smoke tests for the bundled circuit recipe set.
 - `references/rattler-build-workflows.md`: command patterns for build, test, publish, recipe maintenance, debug, patch, package inspection, rebuild, CI, sandboxing, and completions.
 - `references/circuit-toolchain-recipes.md`: package order, commands, and recipe rules for the bundled circuit recipe set.

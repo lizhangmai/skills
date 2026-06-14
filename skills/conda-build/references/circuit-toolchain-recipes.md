@@ -37,7 +37,7 @@ Before building, set the final artifact channel:
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 ```
 
-The wrapper writes artifacts to explicit `--output-dir`, `$CONDA_BUILD_OUTPUT_DIR`, or `$CONDA_BLD_PATH`. It does not choose a default final channel. It solves dependencies from `https://prefix.dev/conda-forge`.
+The wrapper writes artifacts to explicit `--output-dir`, `$CONDA_BUILD_OUTPUT_DIR`, or `$CONDA_BLD_PATH`. It does not choose a default final channel. It can check whether selected artifacts already exist in that channel before building. It solves dependencies from `https://prefix.dev/conda-forge`.
 
 The installed-artifact smoke-test wrapper is:
 
@@ -65,7 +65,20 @@ Build the current Monata baseline into the user-provided local channel:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r
+python3 scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r
+python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
+```
+
+If `rattler-build` is missing and the user approves pixi-managed temporary tool
+download, use an explicit command prefix:
+
+```bash
+python3 scripts/rattler_channel.py build \
+  --recipe-set circuit-toolchain \
+  --package ngspice \
+  --package openvaf-r \
+  --skip-existing \
+  --rattler-build "pixi exec rattler-build"
 ```
 
 Build Xyce and its recipe dependency set through rattler-build only for explicit
@@ -98,6 +111,7 @@ python3 scripts/rattler_channel.py build \
   --recipe-set circuit-toolchain \
   --package ngspice \
   --package openvaf-r \
+  --skip-existing \
   --channel conda-forge
 ```
 

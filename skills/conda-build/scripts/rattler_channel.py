@@ -2,8 +2,10 @@
 """Thin helpers for local conda channels managed with rattler-build."""
 
 import argparse
+import json
 import os
 import shutil
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -75,22 +77,39 @@ def ordered_packages(recipe_set, selected):
     return ordered
 
 
+def recipe_output_name(root, package_dir):
+    recipe = root / package_dir / "recipe.yaml"
+    lines = recipe.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() == "package:":
+            for package_line in lines[index + 1 :]:
+                stripped = package_line.strip()
+                if stripped.startswith("name:"):
+                    return stripped.split(":", 1)[1].strip().strip("\"'")
+                if package_line and not package_line.startswith(" "):
+                    break
+            break
+    return package_dir
+
+
 def output_package_names(root, package_dirs):
-    names = set()
-    for package_dir in package_dirs:
-        recipe = root / package_dir / "recipe.yaml"
-        lines = recipe.read_text(encoding="utf-8").splitlines()
-        for index, line in enumerate(lines):
-            if line.strip() == "package:":
-                for package_line in lines[index + 1 :]:
-                    stripped = package_line.strip()
-                    if stripped.startswith("name:"):
-                        names.add(stripped.split(":", 1)[1].strip().strip("\"'"))
-                        break
-                    if package_line and not package_line.startswith(" "):
-                        break
-                break
-    return names
+    return set(recipe_output_name(root, package_dir) for package_dir in package_dirs)
+
+
+def package_artifacts(output_dir, package_name):
+    if not output_dir.exists():
+        return []
+    artifacts = []
+    for pattern in ("{}-*.conda".format(package_name), "{}-*.tar.bz2".format(package_name)):
+        artifacts.extend(path for path in output_dir.rglob(pattern) if path.is_file())
+    return sorted(set(artifacts))
+
+
+def rattler_command(args):
+    command = shlex.split(args.rattler_build)
+    if not command:
+        raise SystemExit("--rattler-build cannot be empty")
+    return command
 
 
 def run(command, dry_run=False, env=None):
@@ -121,15 +140,16 @@ def resolve_output_dir(value, remind=False):
 
 
 def require_rattler_build(args):
-    if not getattr(args, "dry_run", False) and shutil.which(args.rattler_build) is None:
-        raise SystemExit("rattler-build was not found on PATH: {}".format(args.rattler_build))
+    command = rattler_command(args)
+    if not getattr(args, "dry_run", False) and shutil.which(command[0]) is None:
+        raise SystemExit("rattler-build command was not found on PATH: {}".format(args.rattler_build))
 
 
 def add_common_options(parser):
     parser.add_argument(
         "--rattler-build",
         default="rattler-build",
-        help="rattler-build executable to use.",
+        help="rattler-build executable or quoted command prefix to use.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing them.")
 
@@ -175,7 +195,7 @@ def build_environment(args):
 def base_build_command(args):
     args.output_dir = resolve_output_dir(args.output_dir, remind=True)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    command = [args.rattler_build, "build", "--output-dir", args.output_dir]
+    command = rattler_command(args) + ["build", "--output-dir", args.output_dir]
     extend_channels(command, args.channel)
     if args.render_only:
         command.append("--render-only")
@@ -251,9 +271,54 @@ def cmd_build(args):
     return 0
 
 
+def cmd_check_channel(args):
+    output_dir = resolve_output_dir(args.output_dir, remind=True)
+    root = recipe_dir(args.recipe_set)
+    packages = available_packages(args.recipe_set)
+    selected = ordered_packages(args.recipe_set, args.package)
+    if not selected:
+        raise SystemExit("Pass --package <name> at least once.")
+
+    unknown = sorted(set(selected) - set(packages))
+    if unknown:
+        raise SystemExit("Unknown package(s): {}".format(", ".join(unknown)))
+
+    status = []
+    for package in ordered_packages(args.recipe_set, selected):
+        output_name = recipe_output_name(root, package)
+        artifacts = package_artifacts(output_dir, output_name)
+        status.append(
+            {
+                "recipe": package,
+                "name": output_name,
+                "present": bool(artifacts),
+                "artifacts": [str(path) for path in artifacts],
+            }
+        )
+
+    missing = [item["recipe"] for item in status if not item["present"]]
+    if args.format == "shell-missing":
+        print(" ".join(missing))
+    else:
+        print(
+            json.dumps(
+                {
+                    "output_dir": str(output_dir),
+                    "missing": missing,
+                    "packages": status,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    if missing and args.fail_on_missing:
+        return 1
+    return 0
+
+
 def cmd_test_package(args):
     require_rattler_build(args)
-    command = [args.rattler_build, "test", "--package-file", args.package_file]
+    command = rattler_command(args) + ["test", "--package-file", args.package_file]
     extend_channels(command, args.channel)
     if args.output_dir:
         command.extend(["--output-dir", args.output_dir])
@@ -264,7 +329,7 @@ def cmd_test_package(args):
 
 def cmd_inspect_package(args):
     require_rattler_build(args)
-    command = [args.rattler_build, "package", "inspect"]
+    command = rattler_command(args) + ["package", "inspect"]
     for flag in ("paths", "about", "run_exports", "all", "json"):
         if getattr(args, flag):
             command.append("--{}".format(flag.replace("_", "-")))
@@ -275,7 +340,7 @@ def cmd_inspect_package(args):
 
 def cmd_extract_package(args):
     require_rattler_build(args)
-    command = [args.rattler_build, "package", "extract", args.package_file]
+    command = rattler_command(args) + ["package", "extract", args.package_file]
     if args.dest:
         command.extend(["--dest", args.dest])
     run(command, dry_run=args.dry_run)
@@ -285,7 +350,7 @@ def cmd_extract_package(args):
 def cmd_rebuild(args):
     require_rattler_build(args)
     args.output_dir = resolve_output_dir(args.output_dir, remind=True)
-    command = [args.rattler_build, "rebuild", "--package-file", args.package_file, "--output-dir", args.output_dir]
+    command = rattler_command(args) + ["rebuild", "--package-file", args.package_file, "--output-dir", args.output_dir]
     if args.test:
         command.extend(["--test", args.test])
     extend_extra_args(command, args)
@@ -295,7 +360,7 @@ def cmd_rebuild(args):
 
 def cmd_generate_recipe(args):
     require_rattler_build(args)
-    command = [args.rattler_build, "generate-recipe", args.ecosystem, args.name]
+    command = rattler_command(args) + ["generate-recipe", args.ecosystem, args.name]
     extend_extra_args(command, args)
     run(command, dry_run=args.dry_run)
     return 0
@@ -303,7 +368,7 @@ def cmd_generate_recipe(args):
 
 def cmd_bump_recipe(args):
     require_rattler_build(args)
-    command = [args.rattler_build, "bump-recipe", "--recipe", args.recipe]
+    command = rattler_command(args) + ["bump-recipe", "--recipe", args.recipe]
     if args.version:
         command.extend(["--version", args.version])
     if args.check_only:
@@ -322,7 +387,7 @@ def cmd_rattler(args):
         raw_args = raw_args[1:]
     if not raw_args:
         raise SystemExit("Pass rattler-build arguments after 'rattler --'.")
-    run([args.rattler_build] + raw_args, dry_run=args.dry_run)
+    run(rattler_command(args) + raw_args, dry_run=args.dry_run)
     return 0
 
 
@@ -336,6 +401,25 @@ def parse_args():
     list_recipes = subparsers.add_parser("list-recipes", help="List recipes in a bundled recipe set.")
     list_recipes.add_argument("--recipe-set", default=DEFAULT_RECIPE_SET, help="Bundled recipe set to inspect.")
     list_recipes.set_defaults(func=cmd_list_recipes)
+
+    check_channel = subparsers.add_parser("check-channel", help="Check whether selected packages exist in an output channel.")
+    check_channel.add_argument("--recipe-set", default=DEFAULT_RECIPE_SET, help="Bundled recipe set to use.")
+    check_channel.add_argument("--package", action="append", help="Bundled recipe to check. Repeat for multiple packages.")
+    check_channel.add_argument(
+        "--output-dir",
+        type=Path,
+        help=(
+            "Directory containing built conda packages. Required unless ${} or ${} is set."
+        ).format(OUTPUT_DIR_ENV_VAR, RATTLER_OUTPUT_DIR_ENV_VAR),
+    )
+    check_channel.add_argument(
+        "--format",
+        choices=["json", "shell-missing"],
+        default="json",
+        help="Print JSON status or a shell-friendly missing package list.",
+    )
+    check_channel.add_argument("--fail-on-missing", action="store_true", help="Exit nonzero when any package is missing.")
+    check_channel.set_defaults(func=cmd_check_channel)
 
     build = subparsers.add_parser("build", help="Build or render bundled or custom recipes.")
     build.add_argument("--recipe-set", default=DEFAULT_RECIPE_SET, help="Bundled recipe set to use.")

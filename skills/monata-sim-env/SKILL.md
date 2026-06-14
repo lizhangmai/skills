@@ -14,6 +14,11 @@ OpenVAF/OSDI tooling for model flows.
 ## Rules
 
 - Keep external simulator binaries outside the Monata Python package.
+- Own Monata user-environment orchestration: detect required tools, reuse or
+  request package builds, create/update the project pixi environment, install
+  PyPI `monata`, and verify runtime commands.
+- Do not own recipe maintenance or raw `rattler-build` operations; delegate
+  those to the `conda-build` skill.
 - Prefer a user-owned local conda channel for circuit-tool packages.
 - Require the user prompt to include an explicit `CONDA_BUILD_OUTPUT_DIR=...`
   value, or another explicit final channel directory. Do not invent one.
@@ -24,8 +29,17 @@ OpenVAF/OSDI tooling for model flows.
   `pyproject.toml`, `README.md`, `src/`, `tests/`, and `docs/`.
 - Build the smallest package set needed for the requested Monata workflow. The
   current Monata baseline is `ngspice` plus `openvaf-r`.
+- If the user-provided channel already contains the detected packages, skip the
+  build and do not require `rattler-build`.
 - Do not build every circuit-toolchain package, run `--all`, or build the Xyce
   recipe stack unless the user explicitly asks for those tools.
+- Do not silently install host tools. If `pixi` is missing, stop and ask the
+  user to install it or approve a specific install command. If `rattler-build`
+  is missing and packages must be built, ask before using pixi to run it through
+  a temporary environment.
+- Treat the setup request as permission to create/update the project pixi
+  environment and install project dependencies. It is not permission to install
+  global or host-level tools.
 - Do not publish, upload, or authenticate to remote package channels.
 - Use the `conda-build` skill for rattler-build details when it is installed.
   If it is not installed, tell the user to install `conda-build` from the same
@@ -35,7 +49,9 @@ OpenVAF/OSDI tooling for model flows.
 
 1. Inspect the current directory and decide where the pixi project should live.
    Use an existing project directory when the user is already inside one.
-2. Check for `pixi`, `git`, `python3`, and `rattler-build`.
+2. Check for `python3`, `git`, and `pixi`. If `pixi` is missing, stop before
+   environment setup and ask the user to install pixi or approve a specific
+   install command.
 3. Read the user-provided final channel directory and set:
 
    ```bash
@@ -52,11 +68,11 @@ OpenVAF/OSDI tooling for model flows.
    Monata workspace cannot be inspected, use the current baseline package set:
    `ngspice openvaf-r`.
 
-5. Build or reuse the detected packages from the `circuit-toolchain` recipe set.
-   For the current Monata baseline:
+5. Check the user-provided channel. If all detected packages are present, skip
+   the build step:
 
    ```bash
-   python3 scripts/rattler_channel.py build \
+   python3 scripts/rattler_channel.py check-channel \
      --recipe-set circuit-toolchain \
      --package ngspice \
      --package openvaf-r
@@ -66,7 +82,29 @@ OpenVAF/OSDI tooling for model flows.
    detector output instead of hard-coding this list when the workspace indicates
    a different package set.
 
-6. Create or update the pixi environment with the local channel first:
+6. If any detected package is missing, build only missing work from the
+   `circuit-toolchain` recipe set and let existing artifacts be reused:
+
+   ```bash
+   python3 scripts/rattler_channel.py build \
+     --recipe-set circuit-toolchain \
+     --package ngspice \
+     --package openvaf-r \
+     --skip-existing
+   ```
+
+   If `rattler-build` is missing but `pixi` is available, ask before using:
+
+   ```bash
+   python3 scripts/rattler_channel.py build \
+     --recipe-set circuit-toolchain \
+     --package ngspice \
+     --package openvaf-r \
+     --skip-existing \
+     --rattler-build "pixi exec rattler-build"
+   ```
+
+7. Create or update the pixi environment with the local channel first:
 
    ```bash
    pixi init monata-work \
@@ -77,7 +115,7 @@ OpenVAF/OSDI tooling for model flows.
    pixi add --pypi monata
    ```
 
-7. Verify:
+8. Verify:
 
    ```bash
    pixi run python - <<'PY'

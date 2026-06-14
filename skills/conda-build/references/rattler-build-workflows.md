@@ -16,6 +16,23 @@ Defaults:
 
 Before build or rebuild commands, require the user to set `CONDA_BUILD_OUTPUT_DIR` or provide `--output-dir` for the final artifact channel. If the user did not specify one, ask for it before running build or test commands. Pass explicit `--output-dir` and repeated `--channel` values when the user needs a different local channel or dependency source. Use `/tmp` only for temporary render, debug, or inspection work, not as the long-lived artifact channel.
 
+For bundled recipe sets, check a reusable channel before building when the
+caller wants to avoid rebuilding existing artifacts:
+
+```bash
+python3 scripts/rattler_channel.py check-channel --package pkg-name
+python3 scripts/rattler_channel.py build --recipe-path path/to/recipe --skip-existing
+```
+
+Do not silently install `rattler-build`. If it is missing and the user approves
+pixi-managed temporary tool download, pass an explicit command prefix:
+
+```bash
+python3 scripts/rattler_channel.py build \
+  --recipe-path path/to/recipe \
+  --rattler-build "pixi exec rattler-build"
+```
+
 ## Build, Render, and Variants
 
 Render without building:

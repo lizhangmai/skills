@@ -142,7 +142,11 @@ def resolve_output_dir(value, remind=False):
 def require_rattler_build(args):
     command = rattler_command(args)
     if not getattr(args, "dry_run", False) and shutil.which(command[0]) is None:
-        raise SystemExit("rattler-build command was not found on PATH: {}".format(args.rattler_build))
+        raise SystemExit(
+            "rattler-build command was not found on PATH: {}. "
+            "If pixi is available and the user approves global tool installation, run: "
+            "pixi global install --channel https://prefix.dev/conda-forge rattler-build".format(args.rattler_build)
+        )
 
 
 def add_common_options(parser):

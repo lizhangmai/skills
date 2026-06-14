@@ -25,12 +25,11 @@ python3 scripts/rattler_channel.py build --recipe-path path/to/recipe --skip-exi
 ```
 
 Do not silently install `rattler-build`. If it is missing and the user approves
-pixi-managed temporary tool download, pass an explicit command prefix:
+pixi-managed global tool installation, install it with pixi before building:
 
 ```bash
-python3 scripts/rattler_channel.py build \
-  --recipe-path path/to/recipe \
-  --rattler-build "pixi exec rattler-build"
+pixi global install --channel https://prefix.dev/conda-forge rattler-build
+rattler-build --version
 ```
 
 ## Build, Render, and Variants

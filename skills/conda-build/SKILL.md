@@ -16,9 +16,8 @@ description: Manage local self-use conda channels and conda package supply-chain
   Use `check-channel`, then build only missing packages with `--skip-existing`
   unless the user explicitly requests a rebuild.
 - Do not silently install host tools. If `rattler-build` is missing, report it.
-  When `pixi` is available, offer to run through
-  `--rattler-build "pixi exec rattler-build"` only after the user confirms that
-  temporary pixi tool download.
+  When `pixi` is available, ask before installing it as a global CLI with
+  `pixi global install --channel https://prefix.dev/conda-forge rattler-build`.
 - Use `https://prefix.dev/conda-forge` as the default dependency channel unless explicit `--channel` values are given.
 - When building for a Monata runtime environment, build only the packages the
   requested workflow needs. The current Monata baseline is `ngspice` plus
@@ -58,16 +57,12 @@ python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --packag
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
 ```
 
-If `rattler-build` is missing and the user approves using pixi for the build
-tool, pass an explicit command prefix:
+If `rattler-build` is missing and the user approves installing the build tool
+with pixi, install it globally before building:
 
 ```bash
-python3 scripts/rattler_channel.py build \
-  --recipe-set circuit-toolchain \
-  --package ngspice \
-  --package openvaf-r \
-  --skip-existing \
-  --rattler-build "pixi exec rattler-build"
+pixi global install --channel https://prefix.dev/conda-forge rattler-build
+rattler-build --version
 ```
 
 Build larger dependency sets only when explicitly requested:

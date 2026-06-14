@@ -35,8 +35,9 @@ OpenVAF/OSDI tooling for model flows.
   recipe stack unless the user explicitly asks for those tools.
 - Do not silently install host tools. If `pixi` is missing, stop and ask the
   user to install it or approve a specific install command. If `rattler-build`
-  is missing and packages must be built, ask before using pixi to run it through
-  a temporary environment.
+  is missing and packages must be built, ask before installing it as a global
+  CLI with `pixi global install --channel https://prefix.dev/conda-forge
+  rattler-build`.
 - Treat the setup request as permission to create/update the project pixi
   environment and install project dependencies. It is not permission to install
   global or host-level tools.
@@ -93,15 +94,12 @@ OpenVAF/OSDI tooling for model flows.
      --skip-existing
    ```
 
-   If `rattler-build` is missing but `pixi` is available, ask before using:
+   If `rattler-build` is missing but `pixi` is available, ask before installing
+   it globally:
 
    ```bash
-   python3 scripts/rattler_channel.py build \
-     --recipe-set circuit-toolchain \
-     --package ngspice \
-     --package openvaf-r \
-     --skip-existing \
-     --rattler-build "pixi exec rattler-build"
+   pixi global install --channel https://prefix.dev/conda-forge rattler-build
+   rattler-build --version
    ```
 
 7. Create or update the pixi environment with the local channel first:

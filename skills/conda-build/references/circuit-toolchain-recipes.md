@@ -69,16 +69,12 @@ python3 scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain 
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
 ```
 
-If `rattler-build` is missing and the user approves pixi-managed temporary tool
-download, use an explicit command prefix:
+If `rattler-build` is missing and the user approves pixi-managed global tool
+installation, install it before building:
 
 ```bash
-python3 scripts/rattler_channel.py build \
-  --recipe-set circuit-toolchain \
-  --package ngspice \
-  --package openvaf-r \
-  --skip-existing \
-  --rattler-build "pixi exec rattler-build"
+pixi global install --channel https://prefix.dev/conda-forge rattler-build
+rattler-build --version
 ```
 
 Build Xyce and its recipe dependency set through rattler-build only for explicit

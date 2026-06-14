@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: ngspice
+  version: "46.0"
+
+source:
+  url: https://github.com/imr/ngspice/archive/4feeb94b12a2529f14f9bd7847f7253d704990af.tar.gz
+  sha256: 6ad21935b13894ae3f4f336898db8e062e50c6961d1cc21ee83a005017e76be9
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - bison
+    - flex
+    - libtool
+    - autoconf
+    - automake
+    - make
+    - pkg-config
+    - patchelf
+  host:
+    - fftw
+  run:
+    - fftw
+
+build:
+  number: 0
+  script:
+    content: |
+      ./autogen.sh
+
+      mkdir -p build-exe
+      cd build-exe
+      ../configure --prefix=$PREFIX --enable-osdi --enable-openmp --enable-xspice --enable-cider --without-x --without-readline
+      JOBS="${CPU_COUNT:-$(nproc)}"
+      make -j"$JOBS"
+      make install
+      cd ..
+
+      mkdir -p build-shared
+      cd build-shared
+      ../configure --prefix=$PREFIX --enable-osdi --enable-openmp --enable-xspice --enable-cider --enable-shared --with-ngshared --without-readline
+      make -j"$JOBS"
+      make install
+      cd ..
+
+      sed -i "s|^prefix=.*|prefix=\${pcfiledir}/../..|g" $PREFIX/lib/pkgconfig/ngspice.pc
+
+about:
+  homepage: https://ngspice.sourceforge.io/
+  license: BSD-3-Clause
+  license_file: COPYING
+  summary: Separate ngspice simulator executable and shared library package

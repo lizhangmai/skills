@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: monata
+  version: "0.1.0"
+
+source:
+  git: https://github.com/lizhangmai/monata.git
+  rev: 3c6f0fe37da724f765de6f1ba1f67a5084ebe6fc
+
+build:
+  number: 0
+  noarch: python
+  script:
+    content: |
+      python -m pip install . --no-deps --ignore-installed -vv
+
+      mkdir -p "$PREFIX/share/monata"
+
+      mkdir -p "$PREFIX/etc/conda/activate.d"
+      mkdir -p "$PREFIX/etc/conda/deactivate.d"
+
+      cat > "$PREFIX/etc/conda/activate.d/monata-env.sh" << 'EOF'
+      export MONATA_DATA="$CONDA_PREFIX/share/monata"
+      EOF
+
+      cat > "$PREFIX/etc/conda/deactivate.d/monata-env.sh" << 'EOF'
+      unset MONATA_DATA
+      EOF
+
+requirements:
+  host:
+    - python >=3.11
+    - pip
+    - hatchling
+  run:
+    - python >=3.11
+    - numpy
+    - matplotlib-base
+    - h5py
+    - cffi
+    - ngspice =46.0
+
+tests:
+  - python:
+      imports:
+        - monata
+
+about:
+  homepage: https://github.com/lizhangmai/monata
+  license: MIT
+  license_file: LICENSE
+  summary: MIT-licensed Python orchestration framework for circuit workflows

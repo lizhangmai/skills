@@ -1,0 +1,19 @@
+{
+  "name": "lizhangmai",
+  "description": "Reusable agent skills maintained by lizhangmai, including Monata simulation environment setup and local conda-channel build workflows.",
+  "owner": {
+    "name": "lizhangmai"
+  },
+  "plugins": [
+    {
+      "name": "monata-sim-env",
+      "source": "./skills/monata-sim-env",
+      "description": "Set up a local Monata simulation environment with pixi, a local circuit-tool conda channel, and ngspice verification."
+    },
+    {
+      "name": "conda-build",
+      "source": "./skills/conda-build",
+      "description": "Manage local self-use conda channels and rattler-build package supply-chain workflows, including the bundled circuit-toolchain recipe set."
+    }
+  ]
+}

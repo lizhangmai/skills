@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: openvaf-r
+  version: "0.4.0+git.20260226"
+
+source:
+  git: https://github.com/arpadbuermen/OpenVAF.git
+  rev: 2e066436d985b05cf8e6563e936daf9ab875775a
+
+requirements:
+  build:
+    - rust
+    - python >=3.8.0,<3.13.0
+    - clang >=18.0.0,<22.0.0
+    - llvmdev >=18.0.0,<22.0.0
+  host:
+    - python >=3.8.0,<3.13.0
+    - llvmdev >=18.0.0,<22.0.0
+  run:
+    - python >=3.8.0,<3.13.0
+    - llvm >=18.0.0,<22.0.0
+    - llvm-openmp >=18.0.0,<22.0.0
+
+build:
+  number: 0
+  script:
+    content: |
+      export LLVM_SYS_181_PREFIX=$PREFIX
+      cargo build --release --features llvm18
+      mkdir -p $PREFIX/bin
+      cp target/release/openvaf-r $PREFIX/bin/
+      chmod +x $PREFIX/bin/openvaf-r
+
+about:
+  homepage: https://github.com/pascalkuthe/OpenVAF
+  license: GPL-3.0-only
+  license_file: LICENSE
+  summary: Separate Verilog-A compiler executable package

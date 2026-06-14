@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: vacask
+  version: "0.1.0+git.20260528"
+
+source:
+  - url: https://github.com/robtaylor/VACASK/archive/bcd48e2dd25182f5aaa3392c4e27b4e198372744.tar.gz
+    sha256: 40ff28645d913da7f7d9ac77171e66854254b9ba857c37a6b7caf25750960693
+  - url: https://github.com/marzer/tomlplusplus/archive/refs/tags/v3.4.0.tar.gz
+    sha256: 8517f65938a4faae9ccf8ebb36631a38c1cadfb5efa85d9a72e15b9e97d25155
+    target_directory: tomlplusplus-3.4.0
+
+requirements:
+  build:
+    - ${{ compiler('cxx') }}
+    - cmake >=3.18,<3.27
+    - make
+    - bison
+    - flex
+    - patchelf
+    - python >=3.8.0,<3.13.0
+  host:
+    - boost 1.88.*
+    - flex
+    - suitesparse
+    - openvaf-r
+  run:
+    - openvaf-r
+    - suitesparse
+
+build:
+  number: 0
+  script:
+    content: |
+      set -ex
+
+      TOMLPP_DIR="$SRC_DIR/tomlplusplus-3.4.0"
+
+      cmake -S . -B build -G "Unix Makefiles" \
+        -DCMAKE_INSTALL_PREFIX=$PREFIX \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH=$PREFIX \
+        -DCMAKE_CXX_STANDARD=20 \
+        -DCMAKE_CXX_FLAGS="-O3 -fPIC -fcoroutines -pthread" \
+        -DCMAKE_C_FLAGS="-O3 -fPIC" \
+        -DCMAKE_EXE_LINKER_FLAGS="-pthread -L$PREFIX/lib" \
+        -DCMAKE_LIBRARY_PATH=$PREFIX/lib \
+        -DOPENVAF_DIR=$PREFIX/bin \
+        -DBoost_NO_BOOST_CMAKE=ON \
+        -DBoost_ADDITIONAL_VERSIONS="1.88.0;1.88" \
+        -DBoost_INCLUDE_DIR=$PREFIX/include \
+        -DBoost_LIBRARY_DIR_RELEASE=$PREFIX/lib \
+        -DSuiteSparse_DIR=$PREFIX \
+        -DTOMLPP_DIR=$TOMLPP_DIR
+
+      JOBS="${CPU_COUNT:-$(nproc)}"
+      cmake --build build -j"$JOBS"
+      cmake --install build
+
+about:
+  homepage: https://github.com/robtaylor/VACASK
+  license: AGPL-3.0-only
+  license_file: LICENSE
+  summary: Separate VACASK simulator executable package

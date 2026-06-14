@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: xdm
+  version: "2.7.0"
+
+source:
+  git: https://github.com/Xyce/XDM.git
+  rev: b6394a0275eb94f39b86584fa1e0fa9a3766ed23
+
+requirements:
+  build:
+    - ${{ compiler('cxx') }} 8.*
+    - cmake
+    - make
+    - patchelf
+  host:
+    - libboost-python-devel >=1.70.0
+    - libboost-devel >=1.70.0
+    - python >=3.8.0,<3.13.0
+  run:
+    - python >=3.8.0,<3.13.0
+    - libboost-python >=1.70.0
+
+build:
+  number: 0
+  script:
+    content: |
+      sed -i '/#include <string>/a #include <sstream>' src/c_boost/expr/ast_common.hpp
+      sed -i 's/\<isnan(/std::isnan(/g' src/c_boost/expr/ast_common.hpp
+
+      cmake -S . -B build-dir -G 'Unix Makefiles' \
+        -DCMAKE_PREFIX_PATH=$PREFIX \
+        -DBOOST_ROOT=$PREFIX \
+        -DCMAKE_INSTALL_PREFIX=$PREFIX \
+        -DCMAKE_CXX_STANDARD=11
+      JOBS="${CPU_COUNT:-$(nproc)}"
+      cmake --build build-dir -j"$JOBS"
+      cmake --install build-dir
+
+about:
+  homepage: https://github.com/Xyce/XDM
+  license: GPL-3.0-or-later
+  license_file: License.txt
+  summary: Separate Xyce Data Model netlist translator package

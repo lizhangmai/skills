@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: adms
+  version: "2.3.7"
+
+source:
+  git: https://github.com/Qucs/ADMS.git
+  rev: cadf421b2f645cc2bbd144f49edd588f59d565c5
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - cmake <4
+    - make
+    - flex
+    - bison
+    - perl
+    - perl-xml-libxml
+    - patchelf
+
+build:
+  number: 0
+  script:
+    content: |
+      cmake -S . -B build-dir -G 'Unix Makefiles' \
+        -DCMAKE_INSTALL_PREFIX=$PREFIX \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_C_FLAGS="-O3 -fPIC -std=gnu17"
+      JOBS="${CPU_COUNT:-$(nproc)}"
+      cmake --build build-dir -j"$JOBS" -t install
+
+about:
+  homepage: https://github.com/Qucs/ADMS
+  license: GPL-3.0-only
+  license_file: COPYING
+  summary: Separate Verilog-A to C code-generation executable package

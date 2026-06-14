@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: xyce
+  version: "7.11.0"
+
+source:
+  url: https://codeload.github.com/Xyce/Xyce/tar.gz/67790c6037800bacc32e03285f20fadd7f140a45
+  sha256: 458cf06b6bcd214486765de0ecd40343d3133b0a81b4319c4aa8d0e42def1dd8
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+    - ${{ compiler('fortran') }}
+    - cmake
+    - make
+    - patchelf
+    - bison
+    - flex
+    - adms
+  host:
+    - openmpi 4.1.*
+    - trilinos ==14.4.0
+    - suitesparse
+    - libblas
+    - liblapack
+    - fftw
+    - flex
+  run:
+    - openmpi 4.1.*
+    - trilinos ==14.4.0
+    - suitesparse
+    - libblas
+    - liblapack
+    - fftw
+
+build:
+  number: 0
+  script:
+    content: |
+      cmake -S . -B build-dir -G 'Unix Makefiles' \
+        -DCMAKE_INSTALL_PREFIX=$PREFIX \
+        -DTrilinos_ROOT=$PREFIX \
+        -DCMAKE_C_COMPILER=mpicc \
+        -DCMAKE_CXX_COMPILER=mpicxx \
+        -DCMAKE_Fortran_COMPILER=mpifort \
+        -DCMAKE_CXX_FLAGS="-O3 -fPIC" \
+        -DCMAKE_C_FLAGS="-O3 -fPIC" \
+        -DCMAKE_Fortran_FLAGS="-O3 -fPIC" \
+        -DXyce_PLUGIN_SUPPORT=ON \
+        -DCMAKE_SHARED_LINKER_FLAGS="-rdynamic" \
+        -DCMAKE_EXE_LINKER_FLAGS="-rdynamic"
+      JOBS="${CPU_COUNT:-$(nproc)}"
+      cmake --build build-dir -j"$JOBS" -t install
+
+about:
+  homepage: https://xyce.sandia.gov/
+  license: GPL-3.0-only
+  license_file: COPYING
+  summary: Separate Xyce parallel circuit simulator executable package

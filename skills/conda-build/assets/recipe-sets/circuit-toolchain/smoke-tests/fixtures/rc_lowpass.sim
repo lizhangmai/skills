@@ -1,0 +1,19 @@
+RC low-pass filter
+
+ground 0
+
+load "resistor.osdi"
+load "capacitor.osdi"
+
+model resistor resistor
+model capacitor capacitor
+model vsrc vsource
+
+V1 (in 0) vsrc dc=0 type="pulse" val0=0 val1=1 delay=0 rise=1n fall=1n width=5u period=10u
+R1 (in out) resistor r=1k
+C1 (out 0) capacitor c=1n
+
+control
+  options rawfile="binary"
+  analysis tran1 tran stop=20u step=10n
+endc

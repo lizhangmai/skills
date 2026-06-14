@@ -1,0 +1,4 @@
+interface:
+  display_name: "Conda Build"
+  short_description: "Manage conda package workflows"
+  default_prompt: "Use $conda-build to build, test, inspect, or maintain a local conda channel with rattler-build."

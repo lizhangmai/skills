@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: inspice
+  version: "1.7.0.3"
+
+source:
+  git: https://github.com/insim-ai/InSpice.git
+  rev: 242198c49db2094da0a5ffc6493f6f8add1122c7
+
+build:
+  number: 0
+  noarch: python
+  script: python -m pip install . --no-deps --no-build-isolation -vv
+
+requirements:
+  host:
+    - python >=3.12
+    - pip
+    - setuptools >=42
+    - wheel
+  run:
+    - python >=3.12
+    - numpy
+    - matplotlib-base
+    - pyyaml
+    - cffi >=1.0.0
+    - diskcache
+    - h5py
+    - ply
+
+tests:
+  - python:
+      imports:
+        - InSpice
+        - InSpice.Spice
+        - InSpice.Probe
+        - InSpice.Unit
+
+about:
+  homepage: https://github.com/insim-ai/InSpice
+  license: GPL-3.0-or-later
+  summary: Separate upstream InSpice Python package recipe

@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: trilinos
+  version: "14.4.0"
+
+source:
+  url: https://codeload.github.com/trilinos/Trilinos/tar.gz/975307431d60d0859ebaa27c9169cbb1d4287513
+  sha256: 56ccacb1ae0033d85b19f71dc1945a4aaf3d43ab17b8f7f0bde6ee4a21f33cfe
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+    - ${{ compiler('fortran') }}
+    - cmake
+    - make
+    - patchelf
+  host:
+    - openmpi 4.1.*
+    - suitesparse
+    - libblas
+    - liblapack
+  run:
+    - openmpi 4.1.*
+    - suitesparse
+    - libblas
+    - liblapack
+
+build:
+  number: 0
+  script:
+    content: |
+      cmake -S . -B build-dir -G 'Unix Makefiles' \
+        -DCMAKE_C_COMPILER=mpicc \
+        -DCMAKE_CXX_COMPILER=mpicxx \
+        -DCMAKE_Fortran_COMPILER=mpifort \
+        -DCMAKE_CXX_FLAGS="-O3 -fPIC -Wno-template-body" \
+        -DCMAKE_C_FLAGS="-O3 -fPIC" \
+        -DCMAKE_Fortran_FLAGS="-O3 -fPIC" \
+        -DCMAKE_INSTALL_PREFIX=$PREFIX \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+        -DTrilinos_ENABLE_NOX=ON \
+        -DNOX_ENABLE_LOCA=ON \
+        -DTrilinos_ENABLE_EpetraExt=ON \
+        -DEpetraExt_BUILD_BTF=ON \
+        -DEpetraExt_BUILD_EXPERIMENTAL=ON \
+        -DEpetraExt_BUILD_GRAPH_REORDERINGS=ON \
+        -DTrilinos_ENABLE_TrilinosCouplings=ON \
+        -DTrilinos_ENABLE_Ifpack=ON \
+        -DTrilinos_ENABLE_Isorropia=ON \
+        -DTrilinos_ENABLE_AztecOO=ON \
+        -DTrilinos_ENABLE_Belos=ON \
+        -DTrilinos_ENABLE_Teuchos=ON \
+        -DTrilinos_ENABLE_COMPLEX_DOUBLE=ON \
+        -DTrilinos_ENABLE_Amesos=ON \
+        -DAmesos_ENABLE_KLU=ON \
+        -DTrilinos_ENABLE_Amesos2=ON \
+        -DAmesos2_ENABLE_KLU2=ON \
+        -DAmesos2_ENABLE_Basker=ON \
+        -DTrilinos_ENABLE_Sacado=ON \
+        -DTrilinos_ENABLE_Stokhos=ON \
+        -DTrilinos_ENABLE_ROL=ON \
+        -DTrilinos_ENABLE_Kokkos=ON \
+        -DTrilinos_ENABLE_Zoltan=ON \
+        -DTrilinos_ENABLE_ALL_OPTIONAL_PACKAGES=OFF \
+        -DTPL_ENABLE_AMD=ON \
+        -DAMD_LIBRARY_DIRS=$PREFIX/lib \
+        -DAMD_INCLUDE_DIRS=$PREFIX/include/suitesparse \
+        -DTPL_AMD_INCLUDE_DIRS=$PREFIX/include/suitesparse \
+        -DTPL_ENABLE_BLAS=ON \
+        -DTPL_ENABLE_LAPACK=ON \
+        -DTPL_ENABLE_MPI=ON \
+        -DTPL_DLlib_LIBRARIES="-ldl"
+      JOBS="${CPU_COUNT:-$(nproc)}"
+      cmake --build build-dir -j"$JOBS" -t install
+
+about:
+  homepage: https://trilinos.github.io/
+  license: BSD-3-Clause
+  license_file: LICENSE
+  summary: Separate Trilinos solver library package for simulator dependencies

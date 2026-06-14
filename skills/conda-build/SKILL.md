@@ -10,6 +10,9 @@ description: Manage local self-use conda channels and conda package supply-chain
 - Treat this as a `rattler-build` supply-chain skill, not a circuit-only builder.
 - Before running a build or rebuild, require the user to provide `CONDA_BUILD_OUTPUT_DIR`, `CONDA_BLD_PATH`, or `--output-dir` for the final artifact channel. Do not invent a default output directory. If the user did not specify one, ask for it before executing build or test commands.
 - Use `https://prefix.dev/conda-forge` as the default dependency channel unless explicit `--channel` values are given.
+- When building for a Monata runtime environment, build only the packages the
+  requested workflow needs. Current Monata simulation setup normally needs
+  `ngspice` only; do not use `--all` or `--up-to xyce` unless explicitly asked.
 - Keep third-party sources outside the skill. Recipes should fetch public upstream `git` or `url` sources with pinned revisions or checksums.
 - Do not publish, upload, or authenticate against remote channels unless the user explicitly asks for that target and provides the needed credentials or trusted environment.
 - Read `references/legal-boundaries.md` before advising on redistribution, bundling, or license compatibility.
@@ -42,6 +45,11 @@ Render or build from the bundled recipe set:
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --render-only
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice
+```
+
+Build larger dependency sets only when explicitly requested:
+
+```bash
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --up-to xyce
 ```
 

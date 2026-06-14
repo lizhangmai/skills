@@ -25,6 +25,10 @@ Use the monata-sim-env skill to set up a Monata simulation environment.
 
 Use this final local conda channel for circuit-tool packages:
 CONDA_BUILD_OUTPUT_DIR=<absolute-path-you-choose>
+
+Build only the packages needed for the requested Monata workflow. For the
+current Monata backend, build or reuse ngspice only; do not build the full
+circuit-toolchain set unless I explicitly request it.
 ```
 
 Replace `<absolute-path-you-choose>` with a real absolute path before sending
@@ -66,7 +70,7 @@ python3 scripts/install.py --target codex --skill monata-sim-env --mode symlink 
 
 | Skill | Audience | Purpose |
 | --- | --- | --- |
-| `monata-sim-env` | Monata users | Set up a pixi environment that installs Monata from PyPI, builds or reuses local circuit-tool packages, and verifies `ngspice`. |
+| `monata-sim-env` | Monata users | Set up a pixi environment that installs Monata from PyPI, builds or reuses only the needed local circuit-tool packages, and verifies `ngspice`. |
 | `conda-build` | Package maintainers and advanced users | Manage local self-use conda channels with `rattler-build`, including build, test, inspect, render, debug, patch, bump, rebuild, and publish guidance. |
 
 Maintainer-only release workflows should live outside this public skills

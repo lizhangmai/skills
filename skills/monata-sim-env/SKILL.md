@@ -18,6 +18,10 @@ run the current Monata simulator backend through an `ngspice` executable.
   value, or another explicit final channel directory. Do not invent one.
 - If the user did not provide the final channel directory, ask for it and stop
   before running any build, pixi, or install commands.
+- Build the smallest package set needed for the requested Monata workflow. For
+  the current Monata simulation backend, build or reuse `ngspice` only.
+- Do not build every circuit-toolchain package, run `--all`, or build the Xyce
+  recipe stack unless the user explicitly asks for those tools.
 - Do not publish, upload, or authenticate to remote package channels.
 - Use the `conda-build` skill for rattler-build details when it is installed.
   If it is not installed, tell the user to install `conda-build` from the same
@@ -34,7 +38,8 @@ run the current Monata simulator backend through an `ngspice` executable.
    export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
    ```
 
-4. Build or reuse `ngspice` from the `circuit-toolchain` recipe set:
+4. Build or reuse only `ngspice` from the `circuit-toolchain` recipe set for
+   the default Monata environment:
 
    ```bash
    python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice
@@ -81,10 +86,12 @@ under `CONDA_PREFIX/bin`.
 
 ## Optional Packages
 
-Build additional circuit packages only when the workflow needs them:
+Build additional circuit packages only when the user explicitly asks for a
+workflow that needs them:
 
 - `openvaf-r`: Verilog-A to OSDI preparation.
-- `xyce`: Xyce workflows; build the recipe stack with `--up-to xyce`.
+- `xyce`: deferred Monata backend work or external Xyce workflows; build the
+  recipe stack with `--up-to xyce` only for those explicit requests.
 - `monata-techlib`: install from PyPI only when first-party technology metadata
   is needed:
 

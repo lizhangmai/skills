@@ -6,6 +6,11 @@ Use the bundled `circuit-toolchain` recipe set when the user needs local conda p
 
 Do not call, clone, or assume any old local `circuit` workspace.
 
+Build the smallest useful package set. For a normal Monata runtime environment,
+build or reuse `ngspice` only. Build `openvaf-r`, Xyce-related packages, or the
+full recipe set only when the user explicitly requests a workflow that needs
+those tools.
+
 ## Layout
 
 Recipes live under:
@@ -40,7 +45,7 @@ The installed-artifact smoke-test wrapper is:
 python3 scripts/test_circuit_artifacts.py
 ```
 
-It creates temporary pixi environments from the local output channel, verifies the main simulator stack, and verifies `trilinos 17.1.0` in a separate environment because `xyce` uses `trilinos ==14.4.0`.
+It creates temporary pixi environments from the local output channel, verifies the main simulator stack, and verifies `trilinos 17.1.0` in a separate environment because `xyce` uses `trilinos ==14.4.0`. Use it after building the full stack; it is not part of the default Monata ngspice-only setup.
 
 ## Commands
 
@@ -63,13 +68,15 @@ export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice
 ```
 
-Build Xyce and its recipe dependency set through rattler-build:
+Build Xyce and its recipe dependency set through rattler-build only for explicit
+Xyce workflows:
 
 ```bash
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --up-to xyce
 ```
 
-Build every bundled recipe:
+Build every bundled recipe only for maintainer validation or full local-channel
+preparation:
 
 ```bash
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --all
@@ -89,7 +96,7 @@ Use the standard conda-forge channel alias when needed:
 ```bash
 python3 scripts/rattler_channel.py build \
   --recipe-set circuit-toolchain \
-  --up-to xyce \
+  --package ngspice \
   --channel conda-forge
 ```
 

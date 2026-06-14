@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "monata-sim-env",
   "description": "Set up a local Monata simulation environment with pixi and locally built circuit-tool packages.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "lizhangmai"
   },

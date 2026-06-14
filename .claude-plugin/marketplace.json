@@ -8,12 +8,12 @@
     {
       "name": "monata-sim-env",
       "source": "./skills/monata-sim-env",
-      "description": "Set up a local Monata simulation environment with pixi, a local circuit-tool conda channel, and ngspice verification."
+      "description": "Set up a local Monata simulation environment with pixi, a local circuit-tool conda channel, and ngspice plus OpenVAF verification."
     },
     {
       "name": "conda-build",
       "source": "./skills/conda-build",
-      "description": "Manage local self-use conda channels and rattler-build package supply-chain workflows, including the bundled circuit-toolchain recipe set."
+      "description": "Manage local self-use conda channels and conda package supply-chain workflows with rattler-build, including the bundled circuit-toolchain recipe set."
     }
   ]
 }

@@ -49,7 +49,10 @@ OpenVAF/OSDI tooling for model flows.
 ## Workflow
 
 1. Inspect the current directory and decide where the pixi project should live.
-   Use an existing project directory when the user is already inside one.
+   Use the current directory when the user is already inside the intended
+   project directory, including directories named `test`. Do not create a
+   nested `monata-work/` directory unless the user explicitly asks for a new
+   subdirectory.
 2. Check for `python3`, `git`, and `pixi`. If `pixi` is missing, stop before
    environment setup and ask the user to install pixi or approve a specific
    install command.
@@ -102,13 +105,15 @@ OpenVAF/OSDI tooling for model flows.
    rattler-build --version
    ```
 
-7. Create or update the pixi environment with the local channel first:
+7. Create or update the pixi environment in the selected project directory with
+   the local channel first. If `pixi.toml` already exists, skip `pixi init` and
+   run only the `pixi add` commands. If it does not exist, initialize the
+   current directory:
 
    ```bash
-   pixi init monata-work \
+   pixi init . \
      --channel "file://$CONDA_BUILD_OUTPUT_DIR" \
      --channel https://prefix.dev/conda-forge
-   cd monata-work
    pixi add python=3.12 ngspice openvaf-r
    pixi add --pypi monata
    ```

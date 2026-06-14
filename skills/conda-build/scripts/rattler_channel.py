@@ -13,7 +13,6 @@ RECIPE_SET_ROOT = SKILL_DIR / "assets" / "recipe-sets"
 DEFAULT_RECIPE_SET = "circuit-toolchain"
 OUTPUT_DIR_ENV_VAR = "CONDA_BUILD_OUTPUT_DIR"
 RATTLER_OUTPUT_DIR_ENV_VAR = "CONDA_BLD_PATH"
-DEFAULT_OUTPUT_DIR = Path.home() / ".local" / "share" / "lizhangmai-conda-channel"
 DEFAULT_CHANNELS = ["https://prefix.dev/conda-forge"]
 
 BUILD_ORDERS = {
@@ -114,16 +113,11 @@ def resolve_output_dir(value, remind=False):
     if env_value is not None:
         return env_value
     if remind:
-        print(
-            "NOTICE: set {}={} before building "
-            "to choose the final artifact channel. Using default: {}".format(
-                OUTPUT_DIR_ENV_VAR,
-                DEFAULT_OUTPUT_DIR,
-                DEFAULT_OUTPUT_DIR,
-            ),
-            flush=True,
+        raise SystemExit(
+            "Set CONDA_BUILD_OUTPUT_DIR, CONDA_BLD_PATH, or pass --output-dir before building. "
+            "Choose a persistent local conda channel directory explicitly."
         )
-    return DEFAULT_OUTPUT_DIR
+    raise SystemExit("Missing output directory")
 
 
 def require_rattler_build(args):
@@ -353,8 +347,8 @@ def parse_args():
         "--output-dir",
         type=Path,
         help=(
-            "Directory for built conda packages. Defaults to ${}, then ${}, then {}."
-        ).format(OUTPUT_DIR_ENV_VAR, RATTLER_OUTPUT_DIR_ENV_VAR, DEFAULT_OUTPUT_DIR),
+            "Directory for built conda packages. Required unless ${} or ${} is set."
+        ).format(OUTPUT_DIR_ENV_VAR, RATTLER_OUTPUT_DIR_ENV_VAR),
     )
     build.add_argument("--render-only", action="store_true", help="Render recipes without executing builds.")
     build.add_argument("--with-solve", action="store_true", help="Solve rendered dependencies during render-only analysis.")
@@ -404,8 +398,8 @@ def parse_args():
         "--output-dir",
         type=Path,
         help=(
-            "Directory for rebuilt packages. Defaults to ${}, then ${}, then {}."
-        ).format(OUTPUT_DIR_ENV_VAR, RATTLER_OUTPUT_DIR_ENV_VAR, DEFAULT_OUTPUT_DIR),
+            "Directory for rebuilt packages. Required unless ${} or ${} is set."
+        ).format(OUTPUT_DIR_ENV_VAR, RATTLER_OUTPUT_DIR_ENV_VAR),
     )
     rebuild.add_argument(
         "--test",

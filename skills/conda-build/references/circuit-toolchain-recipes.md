@@ -29,10 +29,10 @@ python3 scripts/rattler_channel.py
 Before building, set the final artifact channel:
 
 ```bash
-export CONDA_BUILD_OUTPUT_DIR="$HOME/.local/share/lizhangmai-conda-channel"
+export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 ```
 
-By default the wrapper writes artifacts to `$CONDA_BUILD_OUTPUT_DIR`, then `$CONDA_BLD_PATH`, then `$HOME/.local/share/lizhangmai-conda-channel`. It solves dependencies from `https://prefix.dev/conda-forge`.
+The wrapper writes artifacts to explicit `--output-dir`, `$CONDA_BUILD_OUTPUT_DIR`, or `$CONDA_BLD_PATH`. It does not choose a default final channel. It solves dependencies from `https://prefix.dev/conda-forge`.
 
 The installed-artifact smoke-test wrapper is:
 
@@ -56,10 +56,10 @@ Render one recipe without building:
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --render-only
 ```
 
-Build ngspice into the default local channel:
+Build ngspice into the user-provided local channel:
 
 ```bash
-export CONDA_BUILD_OUTPUT_DIR="$HOME/.local/share/lizhangmai-conda-channel"
+export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice
 ```
 
@@ -97,7 +97,7 @@ Test packages after building:
 
 ```bash
 python3 scripts/test_circuit_artifacts.py \
-  --output-dir "$HOME/.local/share/lizhangmai-conda-channel"
+  --output-dir "<user-provided-absolute-conda-channel>"
 ```
 
 The smoke test installs from `file://<output-dir>` plus the dependency channel, then checks Python imports and minimal simulator runs for `ngspice`, `openvaf-r`, `adms`, `vacask`, `xyce`, `xdm`, `monata`, and `inspice`.

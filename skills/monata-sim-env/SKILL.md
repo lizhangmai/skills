@@ -14,9 +14,10 @@ run the current Monata simulator backend through an `ngspice` executable.
 
 - Keep external simulator binaries outside the Monata Python package.
 - Prefer a user-owned local conda channel for circuit-tool packages.
-- Before building, ask the user to set or confirm `CONDA_BUILD_OUTPUT_DIR`.
-- Use `$HOME/.local/share/monata-conda-channel` when the user does not choose a
-  persistent output directory.
+- Require the user prompt to include an explicit `CONDA_BUILD_OUTPUT_DIR=...`
+  value, or another explicit final channel directory. Do not invent one.
+- If the user did not provide the final channel directory, ask for it and stop
+  before running any build, pixi, or install commands.
 - Do not publish, upload, or authenticate to remote package channels.
 - Use the `conda-build` skill for rattler-build details when it is installed.
   If it is not installed, tell the user to install `conda-build` from the same
@@ -27,10 +28,10 @@ run the current Monata simulator backend through an `ngspice` executable.
 1. Inspect the current directory and decide where the pixi project should live.
    Use an existing project directory when the user is already inside one.
 2. Check for `pixi`, `git`, `python3`, and `rattler-build`.
-3. Set or confirm:
+3. Read the user-provided final channel directory and set:
 
    ```bash
-   export CONDA_BUILD_OUTPUT_DIR="$HOME/.local/share/monata-conda-channel"
+   export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
    ```
 
 4. Build or reuse `ngspice` from the `circuit-toolchain` recipe set:

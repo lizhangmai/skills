@@ -13,7 +13,6 @@ from pathlib import Path
 SKILL_DIR = Path(__file__).resolve().parents[1]
 OUTPUT_DIR_ENV_VAR = "CONDA_BUILD_OUTPUT_DIR"
 RATTLER_OUTPUT_DIR_ENV_VAR = "CONDA_BLD_PATH"
-DEFAULT_OUTPUT_DIR = Path.home() / ".local" / "share" / "lizhangmai-conda-channel"
 DEFAULT_CHANNELS = ["https://prefix.dev/conda-forge"]
 FIXTURE_DIR = SKILL_DIR / "assets" / "recipe-sets" / "circuit-toolchain" / "smoke-tests" / "fixtures"
 
@@ -22,7 +21,15 @@ def default_output_dir() -> Path:
     value = os.environ.get(OUTPUT_DIR_ENV_VAR) or os.environ.get(RATTLER_OUTPUT_DIR_ENV_VAR)
     if value:
         return Path(value)
-    return DEFAULT_OUTPUT_DIR
+    raise SystemExit(
+        "Set CONDA_BUILD_OUTPUT_DIR, CONDA_BLD_PATH, or pass --output-dir before testing artifacts."
+    )
+
+
+def resolve_output_dir(value) -> Path:
+    if value is not None:
+        return value
+    return default_output_dir()
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,8 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=default_output_dir(),
-        help="Local conda channel containing built artifacts. Defaults to $CONDA_BUILD_OUTPUT_DIR, then $CONDA_BLD_PATH.",
+        help="Local conda channel containing built artifacts. Required unless $CONDA_BUILD_OUTPUT_DIR or $CONDA_BLD_PATH is set.",
     )
     parser.add_argument(
         "--channel",
@@ -225,7 +231,7 @@ def run_trilinos17_smoke() -> int:
 def run_pixi_smoke(args: argparse.Namespace) -> int:
     if shutil.which(args.pixi) is None:
         raise SystemExit(f"pixi was not found on PATH: {args.pixi}")
-    output_dir = args.output_dir.resolve()
+    output_dir = resolve_output_dir(args.output_dir).resolve()
     if not output_dir.exists():
         raise SystemExit(f"Output channel does not exist: {output_dir}")
     channels = args.channel or DEFAULT_CHANNELS

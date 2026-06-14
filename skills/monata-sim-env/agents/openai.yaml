@@ -1,4 +1,4 @@
 interface:
   display_name: "Monata Sim Env"
   short_description: "Set up Monata simulation environments"
-  default_prompt: "Use $monata-sim-env to create a pixi environment for Monata with a local circuit-tool conda channel and ngspice verification."
+  default_prompt: "Use $monata-sim-env to create a pixi environment for Monata with ngspice verification. If I did not provide CONDA_BUILD_OUTPUT_DIR explicitly, ask me for it before running build, pixi, or install commands."

@@ -1,20 +1,20 @@
 # Rattler-Build Workflows
 
-## Local Channel Defaults
+## Local Channel Setup
 
 Use the skill wrapper for repeatable local workflows:
 
 ```bash
-export CONDA_BUILD_OUTPUT_DIR="$HOME/.local/share/lizhangmai-conda-channel"
+export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 python3 scripts/rattler_channel.py build --recipe-path path/to/recipe
 ```
 
 Defaults:
 
-- Output channel: `$CONDA_BUILD_OUTPUT_DIR`, then `$CONDA_BLD_PATH`, then `$HOME/.local/share/lizhangmai-conda-channel`
+- Output channel: explicit `--output-dir`, `$CONDA_BUILD_OUTPUT_DIR`, or `$CONDA_BLD_PATH`
 - Dependency channel: `https://prefix.dev/conda-forge`
 
-Before build or rebuild commands, remind the user to set `CONDA_BUILD_OUTPUT_DIR` for the final artifact channel. Pass explicit `--output-dir` and repeated `--channel` values when the user needs a different local channel or dependency source. Use `/tmp` only for temporary render, debug, or inspection work, not as the default long-lived artifact channel.
+Before build or rebuild commands, require the user to set `CONDA_BUILD_OUTPUT_DIR` or provide `--output-dir` for the final artifact channel. If the user did not specify one, ask for it before running build or test commands. Pass explicit `--output-dir` and repeated `--channel` values when the user needs a different local channel or dependency source. Use `/tmp` only for temporary render, debug, or inspection work, not as the long-lived artifact channel.
 
 ## Build, Render, and Variants
 

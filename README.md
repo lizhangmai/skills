@@ -22,7 +22,14 @@ Then ask Claude Code:
 
 ```text
 Use the monata-sim-env skill to set up a Monata simulation environment.
+
+Use this final local conda channel for circuit-tool packages:
+CONDA_BUILD_OUTPUT_DIR=<absolute-path-you-choose>
 ```
+
+Replace `<absolute-path-you-choose>` with a real absolute path before sending
+the prompt. The skill should ask for this value instead of choosing one when it
+is missing.
 
 ### Cross-Agent Install
 

@@ -8,7 +8,7 @@ description: Manage local self-use conda channels and conda package supply-chain
 ## Operating Rules
 
 - Treat this as a `rattler-build` supply-chain skill, not a circuit-only builder.
-- Before running a build or rebuild, remind the user to set `CONDA_BUILD_OUTPUT_DIR` for the final artifact channel. Use `$HOME/.local/share/lizhangmai-conda-channel` as the default when neither `CONDA_BUILD_OUTPUT_DIR`, `CONDA_BLD_PATH`, nor `--output-dir` is provided.
+- Before running a build or rebuild, require the user to provide `CONDA_BUILD_OUTPUT_DIR`, `CONDA_BLD_PATH`, or `--output-dir` for the final artifact channel. Do not invent a default output directory. If the user did not specify one, ask for it before executing build or test commands.
 - Use `https://prefix.dev/conda-forge` as the default dependency channel unless explicit `--channel` values are given.
 - Keep third-party sources outside the skill. Recipes should fetch public upstream `git` or `url` sources with pinned revisions or checksums.
 - Do not publish, upload, or authenticate against remote channels unless the user explicitly asks for that target and provides the needed credentials or trusted environment.
@@ -39,7 +39,7 @@ python3 scripts/rattler_channel.py list-recipes --recipe-set circuit-toolchain
 Render or build from the bundled recipe set:
 
 ```bash
-export CONDA_BUILD_OUTPUT_DIR="$HOME/.local/share/lizhangmai-conda-channel"
+export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --render-only
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice
 python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --up-to xyce
@@ -83,7 +83,7 @@ python3 scripts/rattler_channel.py rattler -- auth --help
 Smoke-test the bundled circuit artifacts after a build:
 
 ```bash
-export CONDA_BUILD_OUTPUT_DIR="$HOME/.local/share/lizhangmai-conda-channel"
+export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 python3 scripts/test_circuit_artifacts.py
 ```
 

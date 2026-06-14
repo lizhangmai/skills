@@ -11,8 +11,8 @@ description: Manage local self-use conda channels and conda package supply-chain
 - Before running a build or rebuild, require the user to provide `CONDA_BUILD_OUTPUT_DIR`, `CONDA_BLD_PATH`, or `--output-dir` for the final artifact channel. Do not invent a default output directory. If the user did not specify one, ask for it before executing build or test commands.
 - Use `https://prefix.dev/conda-forge` as the default dependency channel unless explicit `--channel` values are given.
 - When building for a Monata runtime environment, build only the packages the
-  requested workflow needs. Current Monata simulation setup normally needs
-  `ngspice` only; do not use `--all` or `--up-to xyce` unless explicitly asked.
+  requested workflow needs. The current Monata baseline is `ngspice` plus
+  `openvaf-r`; do not use `--all` or `--up-to xyce` unless explicitly asked.
 - Keep third-party sources outside the skill. Recipes should fetch public upstream `git` or `url` sources with pinned revisions or checksums.
 - Do not publish, upload, or authenticate against remote channels unless the user explicitly asks for that target and provides the needed credentials or trusted environment.
 - Read `references/legal-boundaries.md` before advising on redistribution, bundling, or license compatibility.
@@ -39,12 +39,12 @@ python3 scripts/rattler_channel.py list-recipe-sets
 python3 scripts/rattler_channel.py list-recipes --recipe-set circuit-toolchain
 ```
 
-Render or build from the bundled recipe set:
+Render or build the current Monata baseline from the bundled recipe set:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --render-only
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice
+python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --render-only
+python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r
 ```
 
 Build larger dependency sets only when explicitly requested:

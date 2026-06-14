@@ -21,19 +21,13 @@ Add this repository as a Claude Code plugin marketplace:
 Then ask Claude Code:
 
 ```text
-Use the monata-sim-env skill to set up a Monata simulation environment.
-
-Use this final local conda channel for circuit-tool packages:
+Use the monata-sim-env skill to set up this Monata environment.
 CONDA_BUILD_OUTPUT_DIR=<absolute-path-you-choose>
-
-Build only the packages needed for the requested Monata workflow. For the
-current Monata backend, build or reuse ngspice only; do not build the full
-circuit-toolchain set unless I explicitly request it.
 ```
 
 Replace `<absolute-path-you-choose>` with a real absolute path before sending
-the prompt. The skill should ask for this value instead of choosing one when it
-is missing.
+the prompt. The skill inspects the Monata workspace before choosing tool
+packages; the current Monata baseline is `ngspice` plus `openvaf-r`.
 
 ### Cross-Agent Install
 
@@ -70,7 +64,7 @@ python3 scripts/install.py --target codex --skill monata-sim-env --mode symlink 
 
 | Skill | Audience | Purpose |
 | --- | --- | --- |
-| `monata-sim-env` | Monata users | Set up a pixi environment that installs Monata from PyPI, builds or reuses only the needed local circuit-tool packages, and verifies `ngspice`. |
+| `monata-sim-env` | Monata users | Inspect a Monata workspace, set up a pixi environment, build or reuse the needed local circuit-tool packages, and verify `ngspice` plus OpenVAF tooling. |
 | `conda-build` | Package maintainers and advanced users | Manage local self-use conda channels with `rattler-build`, including build, test, inspect, render, debug, patch, bump, rebuild, and publish guidance. |
 
 Maintainer-only release workflows should live outside this public skills
@@ -86,6 +80,7 @@ skills/
     .claude-plugin/plugin.json
     SKILL.md
     agents/openai.yaml
+    scripts/
   conda-build/
     .claude-plugin/plugin.json
     SKILL.md

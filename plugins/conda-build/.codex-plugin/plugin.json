@@ -1,0 +1,40 @@
+{
+  "name": "conda-build",
+  "version": "0.2.0",
+  "description": "Manage local self-use conda channels and conda package supply-chain workflows with rattler-build.",
+  "author": {
+    "name": "lizhangmai",
+    "url": "https://github.com/lizhangmai"
+  },
+  "homepage": "https://github.com/lizhangmai/skills",
+  "repository": "https://github.com/lizhangmai/skills",
+  "license": "MIT",
+  "keywords": [
+    "conda",
+    "rattler-build",
+    "recipes",
+    "local-channel",
+    "packaging"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Conda Build",
+    "shortDescription": "Manage local conda package workflows",
+    "longDescription": "Build, render, test, inspect, debug, patch, bump, rebuild, and publish conda packages through rattler-build, including the bundled circuit-toolchain recipe set.",
+    "developerName": "lizhangmai",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/lizhangmai/skills",
+    "privacyPolicyURL": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+    "termsOfServiceURL": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+    "defaultPrompt": [
+      "Build missing local conda packages with rattler-build."
+    ],
+    "brandColor": "#0F766E",
+    "screenshots": []
+  }
+}

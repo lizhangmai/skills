@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the multi-skill repository structure."""
+"""Validate the multi-plugin skills repository structure."""
 
 import json
 import re
@@ -9,7 +9,7 @@ from typing import Dict, List
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILLS_DIR = REPO_ROOT / "skills"
+PLUGINS_DIR = REPO_ROOT / "plugins"
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MARKETPLACE_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FORBIDDEN_PUBLIC_TOKENS = [
@@ -77,40 +77,77 @@ def load_json(path):
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         return f"{path}: invalid JSON: {exc}", None
+    except OSError as exc:
+        return f"{path}: unable to read JSON: {exc}", None
 
     return "", data
 
 
-def validate_plugin_manifest(skill_dir):
+def plugin_dirs():
+    if not PLUGINS_DIR.exists():
+        return []
+    return sorted(path for path in PLUGINS_DIR.iterdir() if path.is_dir())
+
+
+def skill_dir_for_plugin(plugin_dir):
+    return plugin_dir / "skills" / plugin_dir.name
+
+
+def validate_claude_plugin_manifest(plugin_dir):
     errors = []  # type: List[str]
-    skill_name = skill_dir.name
-    manifest = skill_dir / ".claude-plugin" / "plugin.json"
+    plugin_name = plugin_dir.name
+    manifest = plugin_dir / ".claude-plugin" / "plugin.json"
     if not manifest.exists():
-        errors.append(f"{skill_name}: missing .claude-plugin/plugin.json")
+        errors.append(f"{plugin_name}: missing .claude-plugin/plugin.json")
         return errors
 
     error, data = load_json(manifest)
     if error:
-        errors.append(f"{skill_name}: {error}")
+        errors.append(f"{plugin_name}: {error}")
         return errors
     if not isinstance(data, dict):
-        errors.append(f"{skill_name}: plugin manifest must be a JSON object")
+        errors.append(f"{plugin_name}: Claude plugin manifest must be a JSON object")
         return errors
 
-    if data.get("name") != skill_name:
-        errors.append(f"{skill_name}: plugin manifest name must match folder name")
+    if data.get("name") != plugin_name:
+        errors.append(f"{plugin_name}: Claude plugin manifest name must match folder name")
     if not data.get("description"):
-        errors.append(f"{skill_name}: plugin manifest is missing description")
+        errors.append(f"{plugin_name}: Claude plugin manifest is missing description")
     if not data.get("version"):
-        errors.append(f"{skill_name}: plugin manifest is missing version")
-    skills = data.get("skills")
-    if skills is not None and "./" not in skills:
-        errors.append(f"{skill_name}: plugin manifest skills should include ./")
+        errors.append(f"{plugin_name}: Claude plugin manifest is missing version")
+    if data.get("skills") != [f"./skills/{plugin_name}"]:
+        errors.append(f"{plugin_name}: Claude plugin skills must be ./skills/{plugin_name}")
 
     return errors
 
 
-def validate_marketplace(skills):
+def validate_codex_plugin_manifest(plugin_dir):
+    errors = []  # type: List[str]
+    plugin_name = plugin_dir.name
+    manifest = plugin_dir / ".codex-plugin" / "plugin.json"
+    if not manifest.exists():
+        errors.append(f"{plugin_name}: missing .codex-plugin/plugin.json")
+        return errors
+
+    error, data = load_json(manifest)
+    if error:
+        errors.append(f"{plugin_name}: {error}")
+        return errors
+    if not isinstance(data, dict):
+        errors.append(f"{plugin_name}: Codex plugin manifest must be a JSON object")
+        return errors
+
+    if data.get("name") != plugin_name:
+        errors.append(f"{plugin_name}: Codex plugin manifest name must match folder name")
+    if data.get("skills") != "./skills/":
+        errors.append(f"{plugin_name}: Codex plugin skills must be ./skills/")
+    if not isinstance(data.get("interface"), dict):
+        errors.append(f"{plugin_name}: Codex plugin manifest is missing interface metadata")
+
+    return errors
+
+
+def validate_claude_marketplace(plugins):
     errors = []  # type: List[str]
     marketplace = REPO_ROOT / ".claude-plugin" / "marketplace.json"
     if not marketplace.exists():
@@ -122,49 +159,100 @@ def validate_marketplace(skills):
         errors.append(error)
         return errors
     if not isinstance(data, dict):
-        errors.append("Marketplace manifest must be a JSON object")
+        errors.append("Claude marketplace manifest must be a JSON object")
         return errors
 
-    marketplace_name = data.get("name")
-    if not isinstance(marketplace_name, str) or not MARKETPLACE_NAME_RE.fullmatch(marketplace_name):
-        errors.append("Marketplace name must be lowercase hyphen-case")
-
-    skill_names = {path.name for path in skills}
-    plugins = data.get("plugins")
-    if not isinstance(plugins, list) or not plugins:
-        errors.append("Marketplace must define a non-empty plugins list")
+    plugin_names = {path.name for path in plugins}
+    entries = data.get("plugins")
+    if not isinstance(entries, list) or not entries:
+        errors.append("Claude marketplace must define a non-empty plugins list")
         return errors
 
     listed_names = set()
-    for index, plugin in enumerate(plugins):
+    for index, plugin in enumerate(entries):
         if not isinstance(plugin, dict):
-            errors.append(f"Marketplace plugin #{index + 1} must be an object")
+            errors.append(f"Claude marketplace plugin #{index + 1} must be an object")
             continue
         name = plugin.get("name")
         source = plugin.get("source")
-        if name not in skill_names:
-            errors.append(f"Marketplace plugin #{index + 1} references unknown skill {name!r}")
-        if source != f"./skills/{name}":
-            errors.append(f"{name}: marketplace source must be ./skills/{name}")
+        if name not in plugin_names:
+            errors.append(f"Claude marketplace plugin #{index + 1} references unknown plugin {name!r}")
+        if source != f"./plugins/{name}":
+            errors.append(f"{name}: Claude marketplace source must be ./plugins/{name}")
         if not plugin.get("description"):
-            errors.append(f"{name}: marketplace entry is missing description")
+            errors.append(f"{name}: Claude marketplace entry is missing description")
         if name in listed_names:
-            errors.append(f"{name}: duplicate marketplace plugin entry")
+            errors.append(f"{name}: duplicate Claude marketplace plugin entry")
         listed_names.add(name)
 
     return errors
 
 
-def validate_skill(skill_dir):
+def validate_codex_marketplace(plugins):
     errors = []  # type: List[str]
-    skill_name = skill_dir.name
+    marketplace = REPO_ROOT / ".agents" / "plugins" / "marketplace.json"
+    if not marketplace.exists():
+        errors.append("Missing .agents/plugins/marketplace.json")
+        return errors
+
+    error, data = load_json(marketplace)
+    if error:
+        errors.append(error)
+        return errors
+    if not isinstance(data, dict):
+        errors.append("Codex marketplace manifest must be a JSON object")
+        return errors
+
+    marketplace_name = data.get("name")
+    if not isinstance(marketplace_name, str) or not MARKETPLACE_NAME_RE.fullmatch(marketplace_name):
+        errors.append("Codex marketplace name must be lowercase hyphen-case")
+
+    plugin_names = {path.name for path in plugins}
+    entries = data.get("plugins")
+    if not isinstance(entries, list) or not entries:
+        errors.append("Codex marketplace must define a non-empty plugins list")
+        return errors
+
+    listed_names = set()
+    for index, plugin in enumerate(entries):
+        if not isinstance(plugin, dict):
+            errors.append(f"Codex marketplace plugin #{index + 1} must be an object")
+            continue
+        name = plugin.get("name")
+        source = plugin.get("source")
+        if name not in plugin_names:
+            errors.append(f"Codex marketplace plugin #{index + 1} references unknown plugin {name!r}")
+        expected_source = {"source": "local", "path": f"./plugins/{name}"}
+        if source != expected_source:
+            errors.append(f"{name}: Codex marketplace source must be {expected_source!r}")
+        policy = plugin.get("policy")
+        if not isinstance(policy, dict):
+            errors.append(f"{name}: Codex marketplace entry is missing policy")
+        else:
+            if policy.get("installation") != "AVAILABLE":
+                errors.append(f"{name}: Codex marketplace policy.installation must be AVAILABLE")
+            if policy.get("authentication") != "ON_INSTALL":
+                errors.append(f"{name}: Codex marketplace policy.authentication must be ON_INSTALL")
+        if not plugin.get("category"):
+            errors.append(f"{name}: Codex marketplace entry is missing category")
+        if name in listed_names:
+            errors.append(f"{name}: duplicate Codex marketplace plugin entry")
+        listed_names.add(name)
+
+    return errors
+
+
+def validate_skill(plugin_dir):
+    errors = []  # type: List[str]
+    skill_name = plugin_dir.name
+    skill_dir = skill_dir_for_plugin(plugin_dir)
 
     if not NAME_RE.fullmatch(skill_name):
         errors.append(f"{skill_name}: folder name must be lowercase hyphen-case")
 
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
-        return [f"{skill_name}: missing SKILL.md"]
+        return [f"{skill_name}: missing {skill_md.relative_to(REPO_ROOT)}"]
 
     try:
         frontmatter = parse_frontmatter(skill_md)
@@ -173,8 +261,6 @@ def validate_skill(skill_dir):
 
     if frontmatter.get("name") != skill_name:
         errors.append(f"{skill_name}: frontmatter name must match folder name")
-
-    errors.extend(validate_plugin_manifest(skill_dir))
 
     description = frontmatter.get("description", "")
     if not description:
@@ -207,19 +293,22 @@ def validate_skill(skill_dir):
 
 
 def main():
-    if not SKILLS_DIR.exists():
-        print(f"Missing skills directory: {SKILLS_DIR}", file=sys.stderr)
+    if not PLUGINS_DIR.exists():
+        print(f"Missing plugins directory: {PLUGINS_DIR}", file=sys.stderr)
         return 1
 
     errors = []  # type: List[str]
-    skills = sorted(path for path in SKILLS_DIR.iterdir() if path.is_dir())
-    if not skills:
-        errors.append("No skills found")
+    plugins = plugin_dirs()
+    if not plugins:
+        errors.append("No plugins found")
 
-    for skill_dir in skills:
-        errors.extend(validate_skill(skill_dir))
+    for plugin_dir in plugins:
+        errors.extend(validate_claude_plugin_manifest(plugin_dir))
+        errors.extend(validate_codex_plugin_manifest(plugin_dir))
+        errors.extend(validate_skill(plugin_dir))
 
-    errors.extend(validate_marketplace(skills))
+    errors.extend(validate_claude_marketplace(plugins))
+    errors.extend(validate_codex_marketplace(plugins))
 
     for script in (REPO_ROOT / "scripts").glob("*.py"):
         syntax_error = validate_python_syntax(script)
@@ -236,7 +325,7 @@ def main():
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print(f"Validated {len(skills)} skill(s).")
+    print(f"Validated {len(plugins)} plugin(s).")
     return 0
 
 

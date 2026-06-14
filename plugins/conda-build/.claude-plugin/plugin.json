@@ -2,11 +2,11 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "conda-build",
   "description": "Manage local self-use conda channels and conda package supply-chain workflows with rattler-build.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "author": {
     "name": "lizhangmai"
   },
   "skills": [
-    "./"
+    "./skills/conda-build"
   ]
 }

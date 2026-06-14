@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install skills from this repository into local agent skill directories."""
+"""Install plain skills from this repository into local agent skill directories."""
 
 import argparse
 import os
@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILLS_DIR = REPO_ROOT / "skills"
+PLUGINS_DIR = REPO_ROOT / "plugins"
 
 
 def codex_home():
@@ -30,10 +30,21 @@ def target_roots(target):
     return mapping[target]
 
 
+def skill_source(skill):
+    source = PLUGINS_DIR / skill / "skills" / skill
+    if (source / "SKILL.md").exists():
+        return source
+    return None
+
+
 def available_skills():
-    if not SKILLS_DIR.exists():
+    if not PLUGINS_DIR.exists():
         return []
-    return sorted(path.name for path in SKILLS_DIR.iterdir() if (path / "SKILL.md").exists())
+    return sorted(
+        plugin.name
+        for plugin in PLUGINS_DIR.iterdir()
+        if plugin.is_dir() and skill_source(plugin.name) is not None
+    )
 
 
 def remove_existing(path):
@@ -44,8 +55,8 @@ def remove_existing(path):
 
 
 def install_skill(skill, root, mode, force):
-    source = SKILLS_DIR / skill
-    if not (source / "SKILL.md").exists():
+    source = skill_source(skill)
+    if source is None:
         raise SystemExit(f"Unknown skill: {skill}")
 
     root.mkdir(parents=True, exist_ok=True)

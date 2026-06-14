@@ -1,0 +1,32 @@
+{
+  "name": "lizhangmai",
+  "interface": {
+    "displayName": "Lizhangmai Skills"
+  },
+  "plugins": [
+    {
+      "name": "monata-sim-env",
+      "source": {
+        "source": "local",
+        "path": "./plugins/monata-sim-env"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "conda-build",
+      "source": {
+        "source": "local",
+        "path": "./plugins/conda-build"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

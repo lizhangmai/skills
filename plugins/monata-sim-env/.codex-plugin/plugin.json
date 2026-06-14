@@ -1,0 +1,41 @@
+{
+  "name": "monata-sim-env",
+  "version": "0.2.0",
+  "description": "Set up local Monata simulation environments with pixi and locally built circuit-tool packages.",
+  "author": {
+    "name": "lizhangmai",
+    "url": "https://github.com/lizhangmai"
+  },
+  "homepage": "https://github.com/lizhangmai/skills",
+  "repository": "https://github.com/lizhangmai/skills",
+  "license": "MIT",
+  "keywords": [
+    "monata",
+    "pixi",
+    "ngspice",
+    "openvaf",
+    "rattler-build",
+    "conda"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Monata Sim Env",
+    "shortDescription": "Set up a Monata pixi simulation environment",
+    "longDescription": "Inspect a Monata workspace, build or reuse required local circuit-tool packages, create a project-local pixi environment, install Monata, and verify ngspice plus OpenVAF tooling.",
+    "developerName": "lizhangmai",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/lizhangmai/skills",
+    "privacyPolicyURL": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+    "termsOfServiceURL": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+    "defaultPrompt": [
+      "Set up Monata simulation in this directory."
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}

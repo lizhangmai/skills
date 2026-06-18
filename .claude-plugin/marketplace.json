@@ -8,12 +8,17 @@
     {
       "name": "monata-sim-env",
       "source": "./plugins/monata-sim-env",
-      "description": "Set up a local Monata simulation environment with pixi, a local circuit-tool conda channel, and ngspice plus OpenVAF verification."
+      "description": "Set up a complete Monata simulation environment with pixi, a local circuit-tool conda channel, PTM techlibs, and a runnable README demo."
     },
     {
       "name": "conda-build",
       "source": "./plugins/conda-build",
       "description": "Manage local self-use conda channels and conda package supply-chain workflows with rattler-build, including the bundled circuit-toolchain recipe set."
+    },
+    {
+      "name": "monata-techlib",
+      "source": "./plugins/monata-techlib",
+      "description": "Bootstrap official PTM Monata techlibs under MONATA_HOME, preserve third-party notices, and support local private/offline techlib installs."
     }
   ]
 }

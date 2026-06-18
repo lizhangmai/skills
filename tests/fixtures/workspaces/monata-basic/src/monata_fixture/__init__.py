@@ -1,0 +1,1 @@
+"""Minimal Monata fixture package."""

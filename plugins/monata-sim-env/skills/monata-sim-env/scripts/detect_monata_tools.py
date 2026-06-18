@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Detect external circuit-tool packages needed by a Monata workspace."""
 
 import argparse

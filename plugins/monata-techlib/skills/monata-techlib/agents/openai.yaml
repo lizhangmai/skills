@@ -1,0 +1,4 @@
+interface:
+  display_name: "Monata Techlib"
+  short_description: "Bootstrap Monata techlibs"
+  default_prompt: "Use $monata-techlib to bootstrap official PTM techlibs into MONATA_HOME, download from official upstream sources, preserve notices, skip already installed techlibs, and verify Monata discovery. If MONATA_HOME is not provided, use ~/.monata."

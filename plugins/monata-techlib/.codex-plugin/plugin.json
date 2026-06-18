@@ -1,0 +1,40 @@
+{
+  "name": "monata-techlib",
+  "version": "0.1.0",
+  "description": "Bootstrap, install, and validate Monata technology-library resources under MONATA_HOME.",
+  "author": {
+    "name": "lizhangmai",
+    "url": "https://github.com/lizhangmai"
+  },
+  "homepage": "https://github.com/lizhangmai/skills",
+  "repository": "https://github.com/lizhangmai/skills",
+  "license": "MIT",
+  "keywords": [
+    "monata",
+    "techlib",
+    "pdk",
+    "spice",
+    "ptm"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Monata Techlib",
+    "shortDescription": "Bootstrap Monata techlibs",
+    "longDescription": "Download official PTM model-card resources and the VA-Models BSIM-CMG source subset, generate Monata-compatible techlibs under MONATA_HOME, preserve third-party notices, and verify discovery. Also supports installing local private or offline techlib collections.",
+    "developerName": "lizhangmai",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/lizhangmai/skills",
+    "privacyPolicyURL": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+    "termsOfServiceURL": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+    "defaultPrompt": [
+      "Bootstrap official PTM techlibs into MONATA_HOME."
+    ],
+    "brandColor": "#7C3AED",
+    "screenshots": []
+  }
+}

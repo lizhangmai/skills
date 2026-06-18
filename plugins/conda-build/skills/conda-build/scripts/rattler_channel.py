@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Thin helpers for local conda channels managed with rattler-build."""
 
 import argparse

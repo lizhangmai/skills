@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Install and smoke-test built circuit-toolchain conda artifacts with pixi."""
 
 import argparse

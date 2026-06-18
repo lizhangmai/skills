@@ -1,0 +1,8 @@
+{
+  "info": {"subdir": "linux-64"},
+  "packages": {},
+  "packages.conda": {
+    "ngspice-0.0.0-0.conda": {"name": "ngspice", "version": "0.0.0", "build": "0"},
+    "openvaf-r-0.0.0-0.conda": {"name": "openvaf-r", "version": "0.0.0", "build": "0"}
+  }
+}

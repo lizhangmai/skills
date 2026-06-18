@@ -1,0 +1,15 @@
+{
+  "name": "monata-techlib-official-sources",
+  "skill": "monata-techlib",
+  "provider": "static",
+  "workspace_fixture": "techlib-local",
+  "prompt": "Use the monata-techlib skill to bootstrap PTM techlibs. MONATA_HOME=/tmp/monata-home",
+  "assertions": {
+    "skill_must_contain": [
+      "official public PTM page",
+      "VA-Models GitHub repository",
+      "Do not use unofficial mirrors",
+      "Preserve root `LICENSE`, `NOTICE`, `TECHLIBS.toml`, `SHA256SUMS`"
+    ]
+  }
+}

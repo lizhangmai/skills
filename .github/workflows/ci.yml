@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate skills
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Compile Python scripts
+        run: |
+          python -m py_compile scripts/validate.py scripts/install.py scripts/skill_harness.py scripts/render_skill_feedback.py
+
+      - name: Validate repository structure
+        run: python scripts/validate.py
+
+      - name: List installable skills
+        run: python scripts/install.py --list
+
+      - name: Run deterministic skill harness
+        id: harness
+        continue-on-error: true
+        run: python scripts/skill_harness.py run --reports-dir reports/skill-harness
+
+      - name: Render skill feedback report
+        if: always()
+        run: python scripts/render_skill_feedback.py --reports-dir reports/skill-harness --output reports/skill-feedback.md
+
+      - name: Upload harness reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-harness-reports
+          path: reports/
+
+      - name: Fail if deterministic harness failed
+        if: steps.harness.outcome == 'failure'
+        run: exit 1

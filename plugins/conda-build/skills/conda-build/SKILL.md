@@ -44,17 +44,17 @@ It includes recipes for `boost`, `adms`, `trilinos-14.4.0`, `ngspice`, `openvaf-
 List recipe sets and recipes:
 
 ```bash
-python3 scripts/rattler_channel.py list-recipe-sets
-python3 scripts/rattler_channel.py list-recipes --recipe-set circuit-toolchain
+python scripts/rattler_channel.py list-recipe-sets
+python scripts/rattler_channel.py list-recipes --recipe-set circuit-toolchain
 ```
 
 Render or build the current Monata baseline from the bundled recipe set:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
-python3 scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --render-only
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
+python scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --render-only
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
 ```
 
 If `rattler-build` is missing and the user approves installing the build tool
@@ -68,13 +68,13 @@ rattler-build --version
 Build larger dependency sets only when explicitly requested:
 
 ```bash
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --up-to xyce
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --up-to xyce
 ```
 
 Render with solve and variant inputs:
 
 ```bash
-python3 scripts/rattler_channel.py build \
+python scripts/rattler_channel.py build \
   --recipe-path path/to/recipe \
   --render-only \
   --with-solve \
@@ -84,33 +84,33 @@ python3 scripts/rattler_channel.py build \
 Test or inspect an existing package:
 
 ```bash
-python3 scripts/rattler_channel.py test-package --package-file output/linux-64/pkg.conda
-python3 scripts/rattler_channel.py inspect-package --package-file output/linux-64/pkg.conda --all
-python3 scripts/rattler_channel.py extract-package --package-file output/linux-64/pkg.conda --dest /tmp/pkg-inspect
+python scripts/rattler_channel.py test-package --package-file output/linux-64/pkg.conda
+python scripts/rattler_channel.py inspect-package --package-file output/linux-64/pkg.conda --all
+python scripts/rattler_channel.py extract-package --package-file output/linux-64/pkg.conda --dest /tmp/pkg-inspect
 ```
 
 Generate, bump, or reproduce recipes:
 
 ```bash
-python3 scripts/rattler_channel.py generate-recipe pypi jinja2
-python3 scripts/rattler_channel.py bump-recipe --recipe path/to/recipe.yaml --check-only
-python3 scripts/rattler_channel.py rebuild --package-file output/linux-64/pkg.conda
+python scripts/rattler_channel.py generate-recipe pypi jinja2
+python scripts/rattler_channel.py bump-recipe --recipe path/to/recipe.yaml --check-only
+python scripts/rattler_channel.py rebuild --package-file output/linux-64/pkg.conda
 ```
 
 Use raw rattler-build for workflows that need exact CLI control:
 
 ```bash
-python3 scripts/rattler_channel.py rattler -- debug setup --recipe path/to/recipe
-python3 scripts/rattler_channel.py rattler -- debug create-patch --help
-python3 scripts/rattler_channel.py rattler -- publish --help
-python3 scripts/rattler_channel.py rattler -- auth --help
+python scripts/rattler_channel.py rattler -- debug setup --recipe path/to/recipe
+python scripts/rattler_channel.py rattler -- debug create-patch --help
+python scripts/rattler_channel.py rattler -- publish --help
+python scripts/rattler_channel.py rattler -- auth --help
 ```
 
 Smoke-test the bundled circuit artifacts after a build:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
-python3 scripts/test_circuit_artifacts.py
+python scripts/test_circuit_artifacts.py
 ```
 
 ## Resources
@@ -120,3 +120,19 @@ python3 scripts/test_circuit_artifacts.py
 - `references/rattler-build-workflows.md`: command patterns for build, test, publish, recipe maintenance, debug, patch, package inspection, rebuild, CI, sandboxing, and completions.
 - `references/circuit-toolchain-recipes.md`: package order, commands, and recipe rules for the bundled circuit recipe set.
 - `references/legal-boundaries.md`: redistribution and packaging boundaries for third-party simulator tools.
+
+## Feedback Protocol
+
+If this skill appears wrong, incomplete, or unsafe during execution, produce a
+structured feedback report instead of changing external systems:
+
+- Reproduction prompt
+- Observed behavior
+- Expected behavior
+- Suspected cause
+- Minimal proposed skill or repository change
+- Validation case to add or update
+
+Do not push, open pull requests, publish artifacts, authenticate to remote
+services, or contact external production systems unless the user explicitly
+asks and the current environment provides authorized credentials.

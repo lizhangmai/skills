@@ -1,0 +1,12 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "monata-techlib",
+  "description": "Bootstrap, install, and validate Monata technology-library resources under MONATA_HOME.",
+  "version": "0.1.0",
+  "author": {
+    "name": "lizhangmai"
+  },
+  "skills": [
+    "./skills/monata-techlib"
+  ]
+}

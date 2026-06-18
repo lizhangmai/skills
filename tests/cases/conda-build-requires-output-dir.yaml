@@ -1,0 +1,26 @@
+{
+  "name": "conda-build-requires-output-dir",
+  "skill": "conda-build",
+  "provider": "static",
+  "workspace_fixture": "monata-basic",
+  "prompt": "Use the conda-build skill to build ngspice and openvaf-r from the bundled circuit-toolchain recipe set.",
+  "fake_bins": {
+    "rattler-build": {"stdout": "rattler-build 0.0.0-test"}
+  },
+  "assertions": {
+    "skill_must_contain": [
+      "Before running a build or rebuild, require the user to provide",
+      "Do not invent a default output directory",
+      "ask for it before executing build or test commands"
+    ],
+    "installed_files": [
+      "SKILL.md",
+      "scripts/rattler_channel.py",
+      "references/legal-boundaries.md"
+    ],
+    "forbidden_commands": [
+      "rattler-build build",
+      "rattler_channel.py build"
+    ]
+  }
+}

@@ -1,4 +1,4 @@
 interface:
   display_name: "Monata Sim Env"
-  short_description: "Set up Monata simulation environments"
-  default_prompt: "Use $monata-sim-env to set up this Monata environment. Inspect the Monata workspace to choose required tools. If I did not provide CONDA_BUILD_OUTPUT_DIR explicitly, ask me before running build, pixi, or install commands. Do not install missing host tools without confirmation."
+  short_description: "Set up and verify Monata"
+  default_prompt: "Use $monata-sim-env to set up this complete Monata environment: build or reuse required circuit-tool packages, create/update pixi, install Monata, bootstrap PTM techlibs under MONATA_HOME, generate monata_readme_demo.py, and run it successfully. If I did not provide CONDA_BUILD_OUTPUT_DIR explicitly, ask me before running build, pixi, or install commands. Do not install missing host tools without confirmation."

@@ -1,0 +1,19 @@
+{
+  "name": "monata-sim-env-no-default-xyce-all",
+  "skill": "monata-sim-env",
+  "provider": "static",
+  "workspace_fixture": "monata-basic",
+  "prompt": "Use the monata-sim-env skill to set up the current Monata project. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
+  "assertions": {
+    "skill_must_contain": [
+      "Do not build every circuit-toolchain package",
+      "run `--all`",
+      "build the Xyce",
+      "unless the user explicitly asks"
+    ],
+    "forbidden_commands": [
+      "--all",
+      "--up-to xyce"
+    ]
+  }
+}

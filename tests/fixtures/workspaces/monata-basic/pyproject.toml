@@ -1,0 +1,7 @@
+[project]
+name = "monata-fixture"
+version = "0.0.0"
+
+[tool.pixi.project]
+channels = ["https://prefix.dev/conda-forge"]
+platforms = ["linux-64"]

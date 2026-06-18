@@ -1,0 +1,23 @@
+{
+  "name": "monata-sim-env-missing-pixi",
+  "skill": "monata-sim-env",
+  "provider": "static",
+  "workspace_fixture": "monata-basic",
+  "prompt": "Use the monata-sim-env skill to configure Monata. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
+  "fake_bins": {
+    "pixi": {"exit_code": 127, "stderr": "pixi: command not found"},
+    "git": {"stdout": "git version 0.0.0-test"}
+  },
+  "assertions": {
+    "skill_must_contain": [
+      "If `pixi` is missing",
+      "stop before",
+      "environment setup",
+      "Do not silently install host tools",
+      "ask before installing it as a global"
+    ],
+    "forbidden_commands": [
+      "pixi global install"
+    ]
+  }
+}

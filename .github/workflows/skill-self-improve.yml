@@ -1,0 +1,110 @@
+name: Skill Self-Improvement Proposal
+
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: "Optional harness case name to focus on"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  propose:
+    name: Propose bounded skill fix
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Create working branch
+        run: |
+          git switch -c "codex/skill-self-improve-${GITHUB_RUN_ID}"
+
+      - name: Run deterministic harness
+        id: harness
+        continue-on-error: true
+        env:
+          CASE_NAME: ${{ inputs.case }}
+        run: |
+          if [ -n "$CASE_NAME" ]; then
+            python scripts/skill_harness.py run "$CASE_NAME" --reports-dir reports/skill-harness
+          else
+            python scripts/skill_harness.py run --reports-dir reports/skill-harness
+          fi
+
+      - name: Render skill feedback report
+        run: python scripts/render_skill_feedback.py --reports-dir reports/skill-harness --output reports/skill-feedback.md
+
+      - name: Check OpenAI API key
+        id: api_key
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "OPENAI_API_KEY is not configured; generated feedback report only."
+          fi
+
+      - name: Ask Codex for a minimal fix
+        if: steps.api_key.outputs.available == 'true'
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/self-improve.md
+          output-file: reports/codex-self-improve.md
+          sandbox: workspace-write
+
+      - name: Verify proposed changes
+        if: steps.api_key.outputs.available == 'true'
+        run: |
+          python -m py_compile scripts/validate.py scripts/install.py scripts/skill_harness.py scripts/render_skill_feedback.py
+          python scripts/validate.py
+          python scripts/skill_harness.py run --reports-dir reports/skill-harness-after
+
+      - name: Open draft PR when tracked files changed
+        if: steps.api_key.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- . ':!reports'; then
+            echo "No tracked changes to propose."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add . ':!reports'
+          git commit -m "Improve skill guardrails from harness feedback" \
+            -m "Constraint: generated from deterministic skill harness feedback under maintainer-triggered workflow" \
+            -m "Confidence: medium" \
+            -m "Scope-risk: narrow" \
+            -m "Directive: keep self-improvement changes minimal and require human review before merge" \
+            -m "Tested: python scripts/validate.py; python scripts/skill_harness.py run" \
+            -m "Not-tested: live agent provider matrix and full Monata integration"
+          git push --set-upstream origin "codex/skill-self-improve-${GITHUB_RUN_ID}"
+          gh pr create \
+            --draft \
+            --title "Improve skill guardrails from harness feedback" \
+            --body-file reports/skill-feedback.md \
+            --base main \
+            --head "codex/skill-self-improve-${GITHUB_RUN_ID}"
+
+      - name: Upload self-improvement reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-self-improvement-reports
+          path: reports/

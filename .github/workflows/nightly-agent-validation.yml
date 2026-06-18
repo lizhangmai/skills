@@ -1,0 +1,58 @@
+name: Nightly Agent Validation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "27 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  ecosystem:
+    name: Ecosystem validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run baseline validation
+        run: |
+          python scripts/validate.py
+          python scripts/skill_harness.py run --reports-dir reports/skill-harness
+
+      - name: Validate Open Skills discovery
+        run: npx --yes skills@latest add . --list
+
+      - name: Validate Claude plugin when CLI is available
+        run: |
+          if command -v claude >/dev/null 2>&1; then
+            claude plugin validate .
+            claude plugin validate plugins/monata-sim-env
+            claude plugin validate plugins/conda-build
+            claude plugin validate plugins/monata-techlib
+          else
+            echo "Claude CLI is not available; skipping Claude plugin validation."
+          fi
+
+      - name: Render skill feedback report
+        if: always()
+        run: python scripts/render_skill_feedback.py --reports-dir reports/skill-harness --output reports/skill-feedback.md
+
+      - name: Upload validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-skill-validation-reports
+          path: reports/

@@ -1,0 +1,24 @@
+{
+  "name": "monata-techlib-rejects-binaries",
+  "skill": "monata-techlib",
+  "provider": "static",
+  "workspace_fixture": "techlib-local",
+  "prompt": "Use the monata-techlib skill to install local techlib resources from this directory. MONATA_HOME=/tmp/monata-home",
+  "assertions": {
+    "skill_must_contain": [
+      "Reject simulator binaries and generated model artifacts",
+      "ngspice",
+      ".osdi",
+      "Do not vendor, mirror, or redistribute third-party model cards"
+    ],
+    "installed_files": [
+      "SKILL.md",
+      "scripts/install_monata_techlib.py"
+    ],
+    "forbidden_commands": [
+      "openvaf",
+      "ngspice",
+      "xyce"
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Validate the multi-plugin skills repository structure."""
 
 import json
@@ -18,6 +18,19 @@ FORBIDDEN_PUBLIC_TOKENS = [
     "lizhangmai" + "-skills",
     "github.com/lizhangmai/" + "lizhangmai" + "-skills",
 ]
+LOCAL_STATE_DIRS = {
+    ".git",
+    ".mypy_cache",
+    ".omx",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "reports",
+}
+PUBLIC_TEXT_SUFFIXES = {".md", ".py", ".json", ".yaml", ".yml", ".toml", ".txt"}
 
 
 def parse_frontmatter(path):
@@ -70,6 +83,16 @@ def validate_public_text(path):
         if token in text:
             errors.append(f"{path.relative_to(REPO_ROOT)} contains forbidden public token {token!r}")
     return errors
+
+
+def iter_public_text_files():
+    for path in REPO_ROOT.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part in LOCAL_STATE_DIRS for part in path.relative_to(REPO_ROOT).parts):
+            continue
+        if path.suffix in PUBLIC_TEXT_SUFFIXES:
+            yield path
 
 
 def load_json(path):
@@ -315,10 +338,8 @@ def main():
         if syntax_error:
             errors.append(f"{script.relative_to(REPO_ROOT)} does not compile: {syntax_error}")
 
-    for path in REPO_ROOT.rglob("*"):
-        if path.is_file() and ".git" not in path.parts:
-            if path.suffix in {".md", ".py", ".json", ".yaml", ".yml", ".toml", ".txt"}:
-                errors.extend(validate_public_text(path))
+    for path in iter_public_text_files():
+        errors.extend(validate_public_text(path))
 
     if errors:
         for error in errors:

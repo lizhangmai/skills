@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Install plain skills from this repository into local agent skill directories."""
 
 import argparse

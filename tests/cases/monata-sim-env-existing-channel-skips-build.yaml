@@ -1,0 +1,26 @@
+{
+  "name": "monata-sim-env-existing-channel-skips-build",
+  "skill": "monata-sim-env",
+  "provider": "static",
+  "workspace_fixture": "monata-basic",
+  "prompt": "Use the monata-sim-env skill to set up this Monata environment. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
+  "env": {
+    "CONDA_BUILD_OUTPUT_DIR": "/tmp/monata-channel"
+  },
+  "fake_bins": {
+    "pixi": {"stdout": "pixi 0.0.0-test"},
+    "git": {"stdout": "git version 0.0.0-test"},
+    "rattler-build": {"stdout": "rattler-build 0.0.0-test"}
+  },
+  "assertions": {
+    "skill_must_contain": [
+      "If the user-provided channel already contains the detected packages",
+      "skip the",
+      "check-channel",
+      "--skip-existing"
+    ],
+    "forbidden_commands": [
+      "rattler_channel.py build --recipe-set circuit-toolchain"
+    ]
+  }
+}

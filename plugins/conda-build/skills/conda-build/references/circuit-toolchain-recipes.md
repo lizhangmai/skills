@@ -28,7 +28,7 @@ assets/recipe-sets/circuit-toolchain/smoke-tests/fixtures/
 The local channel wrapper is:
 
 ```bash
-python3 scripts/rattler_channel.py
+python scripts/rattler_channel.py
 ```
 
 Before building, set the final artifact channel:
@@ -42,7 +42,7 @@ The wrapper writes artifacts to explicit `--output-dir`, `$CONDA_BUILD_OUTPUT_DI
 The installed-artifact smoke-test wrapper is:
 
 ```bash
-python3 scripts/test_circuit_artifacts.py
+python scripts/test_circuit_artifacts.py
 ```
 
 It creates temporary pixi environments from the local output channel, verifies the main simulator stack, and verifies `trilinos 17.1.0` in a separate environment because `xyce` uses `trilinos ==14.4.0`. Use it after building the full stack; it is broader than the default Monata `ngspice` plus `openvaf-r` setup.
@@ -52,21 +52,21 @@ It creates temporary pixi environments from the local output channel, verifies t
 List bundled packages:
 
 ```bash
-python3 scripts/rattler_channel.py list-recipes --recipe-set circuit-toolchain
+python scripts/rattler_channel.py list-recipes --recipe-set circuit-toolchain
 ```
 
 Render the current Monata baseline without building:
 
 ```bash
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --render-only
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --render-only
 ```
 
 Build the current Monata baseline into the user-provided local channel:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
-python3 scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
+python scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
 ```
 
 If `rattler-build` is missing and the user approves pixi-managed global tool
@@ -81,20 +81,20 @@ Build Xyce and its recipe dependency set through rattler-build only for explicit
 Xyce workflows:
 
 ```bash
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --up-to xyce
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --up-to xyce
 ```
 
 Build every bundled recipe only for maintainer validation or full local-channel
 preparation:
 
 ```bash
-python3 scripts/rattler_channel.py build --recipe-set circuit-toolchain --all
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --all
 ```
 
 Limit compile parallelism for memory-heavy packages:
 
 ```bash
-python3 scripts/rattler_channel.py build \
+python scripts/rattler_channel.py build \
   --recipe-set circuit-toolchain \
   --package trilinos-14.4.0 \
   --jobs 4
@@ -103,7 +103,7 @@ python3 scripts/rattler_channel.py build \
 Use the standard conda-forge channel alias when needed:
 
 ```bash
-python3 scripts/rattler_channel.py build \
+python scripts/rattler_channel.py build \
   --recipe-set circuit-toolchain \
   --package ngspice \
   --package openvaf-r \
@@ -114,7 +114,7 @@ python3 scripts/rattler_channel.py build \
 Test packages after building:
 
 ```bash
-python3 scripts/test_circuit_artifacts.py \
+python scripts/test_circuit_artifacts.py \
   --output-dir "<user-provided-absolute-conda-channel>"
 ```
 

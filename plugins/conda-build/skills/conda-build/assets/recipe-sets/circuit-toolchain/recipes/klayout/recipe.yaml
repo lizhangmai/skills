@@ -5,8 +5,8 @@ package:
   version: "0.30.9"
 
 source:
-  git: https://github.com/KLayout/klayout.git
-  rev: 6270877110ef808dd442fd2244164cec06a7b10e
+  url: https://codeload.github.com/KLayout/klayout/tar.gz/6270877110ef808dd442fd2244164cec06a7b10e
+  sha256: cda63ae729ac6e1bba92d1003e1af12093db5bb7c45dca241337ca27dc68bedf
 
 requirements:
   build:
@@ -16,7 +16,8 @@ requirements:
     - pkg-config
     - patchelf
   host:
-    - qt-main >=5.15,<6
+    - qt6-main >=6,<7
+    - qt6-multimedia >=6,<7
     - python >=3.12,<3.13
     - ruby >=3.2,<3.5
     - libgit2
@@ -24,8 +25,11 @@ requirements:
     - libcurl
     - expat
     - zlib
+    - libgl-devel
+    - libopengl-devel
   run:
-    - qt-main >=5.15,<6
+    - qt6-main >=6,<7
+    - qt6-multimedia >=6,<7
     - python >=3.12,<3.13
     - ruby >=3.2,<3.5
     - libgit2
@@ -39,19 +43,47 @@ build:
   script:
     content: |
       JOBS="${CPU_COUNT:-$(nproc)}"
+      if [ "$JOBS" -gt 16 ]; then
+        JOBS=16
+      fi
+      PY_VERSION="$("$PREFIX/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+      PY_INCLUDE="$("$PREFIX/bin/python" -c 'import sysconfig; print(sysconfig.get_path("include"))')"
+      PY_LIB="$PREFIX/lib/libpython${PY_VERSION}.so"
+      QMAKE="$PREFIX/bin/qmake"
+      if [ ! -x "$QMAKE" ] && [ -x "$PREFIX/bin/qmake6" ]; then
+        QMAKE="$PREFIX/bin/qmake6"
+      fi
+      test -f "$PY_INCLUDE/Python.h"
+      test -f "$PY_LIB"
+      test -x "$QMAKE"
       export QMAKE_CCACHE=0
+      KLAYOUT_PREFIX="$PREFIX/lib/klayout"
       ./build.sh \
         -release \
         -expert \
-        -qmake "$PREFIX/bin/qmake" \
+        -qmake "$QMAKE" \
         -python "$PREFIX/bin/python" \
+        -pyinc "$PY_INCLUDE" \
+        -pylib "$PY_LIB" \
         -ruby "$PREFIX/bin/ruby" \
         -with-qtbinding \
         -libpng \
         -libcurl \
         -libexpat \
-        -prefix "$PREFIX" \
+        -prefix "$KLAYOUT_PREFIX" \
         -j"$JOBS"
+      mkdir -p "$PREFIX/bin"
+      for tool in klayout strm2cif strm2dxf strm2gds strm2gdstxt strm2lstr strm2mag strm2oas strm2txt strmclip strmcmp strmrun strmxor; do
+        test -x "$KLAYOUT_PREFIX/$tool"
+        {
+          printf '%s\n' '#!/bin/sh'
+          printf '%s\n' 'prefix=$(CDPATH= cd "$(dirname "$0")/.." && pwd)'
+          printf 'exec "$prefix/lib/klayout/%s" "$@"\n' "$tool"
+        } > "$PREFIX/bin/$tool"
+        chmod +x "$PREFIX/bin/$tool"
+      done
+      mkdir -p "$SP_DIR"
+      echo "../../klayout/pymod" > "$SP_DIR/klayout.pth"
       mkdir -p "$PREFIX/share/licenses/klayout"
       cp LICENSE "$PREFIX/share/licenses/klayout/LICENSE"
 

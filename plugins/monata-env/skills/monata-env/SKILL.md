@@ -41,10 +41,10 @@ directory.
   `pyproject.toml`, `README.md`, `src/`, `tests/`, and `docs/`.
 - Build the smallest package set needed for the requested Monata workflow. The
   current Monata baseline is `ngspice`, `openvaf-r`, and `klayout`.
-- Build KLayout from the public upstream repository
+- Build KLayout from the public upstream source
   `https://github.com/KLayout/klayout/tree/v0.30.9` through the bundled
-  `klayout` recipe. Keep the recipe source remote and pinned to the `v0.30.9`
-  commit; do not depend on a local KLayout checkout.
+  `klayout` recipe. Keep the recipe source remote, pinned to the `v0.30.9`
+  commit, and checksum-verified; do not depend on a local KLayout checkout.
 - If the user-provided channel already contains the detected packages, skip the
   build and do not require `rattler-build`.
 - Do not build every circuit-toolchain package, run `--all`, or build the Xyce

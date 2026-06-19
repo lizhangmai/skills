@@ -1,6 +1,6 @@
 ---
 name: monata-env
-description: Set up and validate global circuit-tool dependencies for Monata projects with pixi global. Use when a user asks an agent to install or configure Monata circuit tools; inspect a Monata repository to choose required simulator and layout packages; build or reuse ngspice, OpenVAF/OSDI, and KLayout packages; install them into a pixi global environment named monata-env; expose tool commands; or validate ngspice, openvaf-r, and klayout without installing Monata or techlibs.
+description: Set up and validate global circuit-tool dependencies for Monata projects with pixi global. Use when a user asks an agent to install or configure Monata circuit tools; inspect a Monata repository to choose required simulator, schematic, and layout packages; build or reuse ngspice, OpenVAF/OSDI, KLayout, and Xschem packages; install them into a pixi global environment named monata-env; expose tool commands; or validate ngspice, openvaf-r, klayout, and xschem without installing Monata or techlibs.
 ---
 
 # Monata Env
@@ -9,7 +9,7 @@ description: Set up and validate global circuit-tool dependencies for Monata pro
 
 Create or update a pixi global environment named `monata-env` that exposes the
 circuit tools used by Monata projects. The default tool set is `ngspice`,
-`openvaf-r`, and `klayout`.
+`openvaf-r`, `klayout`, and `xschem`.
 
 This skill intentionally does not install the Monata package while Monata is
 still under active development. It may install Python, Ruby, Qt, and other
@@ -40,11 +40,16 @@ directory.
   `scripts/detect_monata_tools.py` from this skill; otherwise read
   `pyproject.toml`, `README.md`, `src/`, `tests/`, and `docs/`.
 - Build the smallest package set needed for the requested Monata workflow. The
-  current Monata baseline is `ngspice`, `openvaf-r`, and `klayout`.
+  current Monata baseline is `ngspice`, `openvaf-r`, `klayout`, and
+  `xschem`.
 - Build KLayout from the public upstream source
   `https://github.com/KLayout/klayout/tree/v0.30.9` through the bundled
   `klayout` recipe. Keep the recipe source remote, pinned to the `v0.30.9`
   commit, and checksum-verified; do not depend on a local KLayout checkout.
+- Build Xschem from the public upstream source
+  `https://codeberg.org/stef_xschem/xschem/src/tag/3.4.7` through the bundled
+  `xschem` recipe. Keep the recipe source remote, pinned to the `3.4.7`
+  commit, and checksum-verified; do not depend on a local Xschem checkout.
 - If the user-provided channel already contains the detected packages, skip the
   build and do not require `rattler-build`.
 - Do not build every circuit-toolchain package, run `--all`, or build the Xyce
@@ -84,7 +89,7 @@ directory.
 
    Run this from the installed or cloned `monata-env` skill directory. If a
    Monata workspace cannot be inspected, use the current baseline package set:
-   `ngspice openvaf-r klayout`.
+   `ngspice openvaf-r klayout xschem`.
 
 5. Resolve the conda-build helper. Prefer a local sibling checkout:
 
@@ -110,7 +115,8 @@ directory.
      --recipe-set circuit-toolchain \
      --package ngspice \
      --package openvaf-r \
-     --package klayout
+     --package klayout \
+     --package xschem
    ```
 
    Run this from the resolved `conda-build` skill directory. Use the detector
@@ -126,6 +132,7 @@ directory.
      --package ngspice \
      --package openvaf-r \
      --package klayout \
+     --package xschem \
      --skip-existing
    ```
 
@@ -147,7 +154,8 @@ directory.
      --expose ngspice=ngspice \
      --expose openvaf-r=openvaf-r \
      --expose klayout=klayout \
-     ngspice openvaf-r klayout=0.30.9
+     --expose xschem=xschem \
+     ngspice openvaf-r klayout=0.30.9 xschem=3.4.7
    ```
 
    Use the detector output instead of hard-coding this list when the workspace
@@ -160,6 +168,7 @@ directory.
    ngspice --version
    openvaf-r --help
    klayout -v
+   xschem --version
    ```
 
 ## Existing Circuit-Tool Environment
@@ -171,6 +180,7 @@ the commands directly and report that no pixi global install was needed:
 ngspice --version
 openvaf-r --help
 klayout -v
+xschem --version
 ```
 
 Use this shortcut only when all required executables are already on `PATH`.

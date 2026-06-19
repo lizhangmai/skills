@@ -25,6 +25,7 @@ BUILD_ORDERS = {
         "ngspice",
         "openvaf-r",
         "klayout",
+        "xschem",
         "xdm",
         "inspice",
         "monata",

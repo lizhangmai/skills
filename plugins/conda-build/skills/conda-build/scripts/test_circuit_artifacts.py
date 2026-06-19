@@ -106,6 +106,7 @@ adms = "2.3.7.*"
 ngspice = "46.0.*"
 openvaf-r = "0.4.0.*"
 klayout = "0.30.9.*"
+xschem = "3.4.7.*"
 vacask = "0.1.0.*"
 xdm = "2.7.0.*"
 xyce = "7.11.0.*"
@@ -159,6 +160,12 @@ def smoke_klayout() -> None:
     require_tool("klayout")
     run(["klayout", "-v"], timeout=60)
     print("PASS: klayout reported its version")
+
+
+def smoke_xschem() -> None:
+    require_tool("xschem")
+    run(["xschem", "--version"], timeout=60)
+    print("PASS: xschem reported its version")
 
 
 def smoke_adms(fixtures: Path, work_dir: Path) -> None:
@@ -217,6 +224,7 @@ def run_toolchain_smoke(fixtures: Path) -> int:
         smoke_ngspice(fixtures, work_dir)
         smoke_openvaf(fixtures, work_dir)
         smoke_klayout()
+        smoke_xschem()
         smoke_adms(fixtures, work_dir)
         smoke_vacask(fixtures, work_dir)
         smoke_xyce(fixtures, work_dir)

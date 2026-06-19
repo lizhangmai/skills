@@ -53,8 +53,8 @@ CONDA_BUILD_OUTPUT_DIR=<absolute-path-you-choose>
 
 Replace `<absolute-path-you-choose>` with a real absolute path before sending
 the prompt. The skill inspects the Monata workspace before choosing tool
-packages; the current Monata baseline is `ngspice`, `openvaf-r`, and
-KLayout `0.30.9`.
+packages; the current Monata baseline is `ngspice`, `openvaf-r`,
+KLayout `0.30.9`, and Xschem `3.4.7`.
 
 `monata-techlib` remains available as a lower-level standalone helper for
 private/offline techlib collections:
@@ -113,7 +113,7 @@ python scripts/install.py --target codex --skill monata-env --mode symlink --for
 
 | Plugin | Audience | Purpose |
 | --- | --- | --- |
-| `monata-env` | Monata users | Global circuit/layout-tool setup for Monata: inspect the workspace, build or reuse local tool packages, install them into pixi global `monata-env`, expose tool commands, and smoke-test `ngspice`/`openvaf-r`/`klayout`. |
+| `monata-env` | Monata users | Global circuit/layout-tool setup for Monata: inspect the workspace, build or reuse local tool packages, install them into pixi global `monata-env`, expose tool commands, and smoke-test `ngspice`/`openvaf-r`/`klayout`/`xschem`. |
 | `conda-build` | Package maintainers and advanced users | Manage local self-use conda channels with `rattler-build`, including build, test, inspect, render, debug, patch, bump, rebuild, and publish guidance. |
 | `monata-techlib` | Advanced Monata users | Standalone techlib resource setup when a user wants only model-library installation outside the full Monata environment workflow. |
 

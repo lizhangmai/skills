@@ -20,10 +20,13 @@
       "--expose ngspice=ngspice",
       "--expose openvaf-r=openvaf-r",
       "--expose klayout=klayout",
+      "--expose xschem=xschem",
       "klayout=0.30.9",
+      "xschem=3.4.7",
       "ngspice --version",
       "openvaf-r --help",
-      "klayout -v"
+      "klayout -v",
+      "xschem --version"
     ],
     "installed_files": [
       "SKILL.md",

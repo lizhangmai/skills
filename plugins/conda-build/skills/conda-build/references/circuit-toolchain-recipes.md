@@ -7,9 +7,9 @@ Use the bundled `circuit-toolchain` recipe set when the user needs local conda p
 Do not call, clone, or assume any old local `circuit` workspace.
 
 Build the smallest useful package set. For a normal Monata runtime environment,
-build or reuse `ngspice` and `openvaf-r`. Build Xyce-related packages or the
-full recipe set only when the user explicitly requests a workflow that needs
-those tools.
+build or reuse `ngspice`, `openvaf-r`, and `klayout`. Build Xyce-related
+packages or the full recipe set only when the user explicitly requests a
+workflow that needs those tools.
 
 ## Layout
 
@@ -58,15 +58,15 @@ python scripts/rattler_channel.py list-recipes --recipe-set circuit-toolchain
 Render the current Monata baseline without building:
 
 ```bash
-python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --render-only
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout --render-only
 ```
 
 Build the current Monata baseline into the user-provided local channel:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
-python scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r
-python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
+python scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout --skip-existing
 ```
 
 If `rattler-build` is missing and the user approves pixi-managed global tool
@@ -107,6 +107,7 @@ python scripts/rattler_channel.py build \
   --recipe-set circuit-toolchain \
   --package ngspice \
   --package openvaf-r \
+  --package klayout \
   --skip-existing \
   --channel conda-forge
 ```
@@ -118,17 +119,17 @@ python scripts/test_circuit_artifacts.py \
   --output-dir "<user-provided-absolute-conda-channel>"
 ```
 
-The smoke test installs from `file://<output-dir>` plus the dependency channel, then checks Python imports and minimal simulator runs for `ngspice`, `openvaf-r`, `adms`, `vacask`, `xyce`, `xdm`, `monata`, and `inspice`.
+The smoke test installs from `file://<output-dir>` plus the dependency channel, then checks Python imports and minimal simulator/layout-tool runs for `ngspice`, `openvaf-r`, `klayout`, `adms`, `vacask`, `xyce`, `xdm`, `monata`, and `inspice`.
 
 ## Package Order
 
 The known package order is:
 
 ```text
-boost -> adms -> trilinos-14.4.0 -> ngspice -> openvaf-r -> xdm -> inspice -> monata -> vacask -> xyce -> trilinos-17.1.0
+boost -> adms -> trilinos-14.4.0 -> ngspice -> openvaf-r -> klayout -> xdm -> inspice -> monata -> vacask -> xyce -> trilinos-17.1.0
 ```
 
-`ngspice`, `openvaf-r`, `xdm`, `inspice`, `monata`, and `trilinos-17.1.0` are useful independently. `xyce` depends on `adms` and `trilinos-14.4.0`. `vacask` depends on `boost` and `openvaf-r`.
+`ngspice`, `openvaf-r`, `klayout`, `xdm`, `inspice`, `monata`, and `trilinos-17.1.0` are useful independently. `xyce` depends on `adms` and `trilinos-14.4.0`. `vacask` depends on `boost` and `openvaf-r`.
 
 ## Recipe Rules
 

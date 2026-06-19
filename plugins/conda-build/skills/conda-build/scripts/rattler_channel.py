@@ -24,6 +24,7 @@ BUILD_ORDERS = {
         "trilinos-14.4.0",
         "ngspice",
         "openvaf-r",
+        "klayout",
         "xdm",
         "inspice",
         "monata",

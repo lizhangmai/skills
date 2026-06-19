@@ -14,7 +14,7 @@
 
 **Files:**
 - Create: `tests/cases/monata-env-global-tools.yaml`
-- Create: `tests/cases/monata-env-no-python-or-techlibs.yaml`
+- Create: `tests/cases/monata-env-no-monata-or-techlibs.yaml`
 
 - [x] **Step 1: Write failing global-tool case**
 
@@ -53,21 +53,21 @@ Create `tests/cases/monata-env-global-tools.yaml`:
 }
 ```
 
-- [x] **Step 2: Write failing no-Python/no-techlib case**
+- [x] **Step 2: Write failing no-Monata/no-techlib case**
 
-Create `tests/cases/monata-env-no-python-or-techlibs.yaml`:
+Create `tests/cases/monata-env-no-monata-or-techlibs.yaml`:
 
 ```json
 {
-  "name": "monata-env-no-python-or-techlibs",
+  "name": "monata-env-no-monata-or-techlibs",
   "skill": "monata-env",
   "provider": "static",
   "workspace_fixture": "monata-basic",
-  "prompt": "Use the monata-env skill to install only global circuit tools. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
+  "prompt": "Use the monata-env skill to install only global circuit and layout tools. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
   "assertions": {
     "skill_must_contain": [
-      "Do not install Python",
       "Do not install Monata",
+      "Do not install the `monata` Python package",
       "Do not bootstrap Monata techlibs",
       "Do not create or modify a project-local pixi.toml"
     ],
@@ -94,7 +94,7 @@ Create `tests/cases/monata-env-no-python-or-techlibs.yaml`:
 Run:
 
 ```bash
-python scripts/skill_harness.py run monata-env-global-tools monata-env-no-python-or-techlibs
+python scripts/skill_harness.py run monata-env-global-tools monata-env-no-monata-or-techlibs
 ```
 
 Expected: fails with `Unknown skill or missing SKILL.md: monata-env`.
@@ -139,7 +139,7 @@ The new `SKILL.md` must contain:
 ```markdown
 ---
 name: monata-env
-description: Set up and validate global circuit-tool dependencies for Monata projects with pixi global. Use when a user asks an agent to install or configure Monata circuit tools; inspect a Monata repository to choose required simulator packages; build or reuse ngspice and OpenVAF/OSDI packages; install them into a pixi global environment named monata-env; expose tool commands; or validate ngspice and openvaf-r without installing Python, Monata, or techlibs.
+description: Set up and validate global circuit-tool dependencies for Monata projects with pixi global. Use when a user asks an agent to install or configure Monata circuit tools; inspect a Monata repository to choose required simulator packages; build or reuse ngspice and OpenVAF/OSDI packages; install them into a pixi global environment named monata-env; expose tool commands; or validate ngspice and openvaf-r without installing Monata or techlibs.
 ---
 ```
 
@@ -166,7 +166,7 @@ openvaf-r --help
 Run:
 
 ```bash
-python scripts/skill_harness.py run monata-env-global-tools monata-env-no-python-or-techlibs
+python scripts/skill_harness.py run monata-env-global-tools monata-env-no-monata-or-techlibs
 ```
 
 Expected: both cases pass.

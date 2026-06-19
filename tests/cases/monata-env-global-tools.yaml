@@ -19,8 +19,11 @@
       "--channel https://prefix.dev/conda-forge",
       "--expose ngspice=ngspice",
       "--expose openvaf-r=openvaf-r",
+      "--expose klayout=klayout",
+      "klayout=0.30.9",
       "ngspice --version",
-      "openvaf-r --help"
+      "openvaf-r --help",
+      "klayout -v"
     ],
     "installed_files": [
       "SKILL.md",

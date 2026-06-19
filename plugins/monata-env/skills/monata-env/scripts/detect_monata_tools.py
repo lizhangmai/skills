@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 
 
-BASELINE_PACKAGES = ["ngspice", "openvaf-r"]
+BASELINE_PACKAGES = ["ngspice", "openvaf-r", "klayout"]
+PIXI_DEPENDENCY_PINS = {"klayout": "klayout=0.30.9"}
 TEXT_SUFFIXES = {".md", ".py", ".toml", ".rst", ".txt"}
 SCAN_DIRS = ("src", "tests", "docs")
 SCAN_FILES = ("pyproject.toml", "README.md")
@@ -77,7 +78,9 @@ def detect(root):
     packages = list(BASELINE_PACKAGES) if is_monata else []
     reasons = []
     if is_monata:
-        reasons.append("Monata baseline environment currently uses ngspice plus OpenVAF/OSDI tooling.")
+        reasons.append("Monata baseline environment currently uses ngspice, OpenVAF/OSDI tooling, and KLayout.")
+    if "klayout" in haystack or "gds" in haystack or "oas" in haystack:
+        evidence.append("workspace text: KLayout/layout tooling")
     if "xycerunner" in haystack or (root / "src" / "monata" / "sim" / "backends" / "xyce.py").exists():
         packages.append("xyce")
         reasons.append("Active Xyce backend evidence was found.")
@@ -89,7 +92,10 @@ def detect(root):
     return {
         "root": str(root),
         "packages": sorted(set(packages), key=packages.index),
-        "pixi_dependencies": sorted(set(packages), key=packages.index),
+        "pixi_dependencies": [
+            PIXI_DEPENDENCY_PINS.get(package, package)
+            for package in sorted(set(packages), key=packages.index)
+        ],
         "checks": sorted(set(packages), key=packages.index),
         "evidence": evidence[:20],
         "reasons": reasons,

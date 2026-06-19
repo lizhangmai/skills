@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: klayout
+  version: "0.30.9"
+
+source:
+  git: https://github.com/KLayout/klayout.git
+  rev: 6270877110ef808dd442fd2244164cec06a7b10e
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+    - make
+    - pkg-config
+    - patchelf
+  host:
+    - qt-main >=5.15,<6
+    - python >=3.12,<3.13
+    - ruby >=3.2,<3.5
+    - libgit2
+    - libpng
+    - libcurl
+    - expat
+    - zlib
+  run:
+    - qt-main >=5.15,<6
+    - python >=3.12,<3.13
+    - ruby >=3.2,<3.5
+    - libgit2
+    - libpng
+    - libcurl
+    - expat
+    - zlib
+
+build:
+  number: 0
+  script:
+    content: |
+      JOBS="${CPU_COUNT:-$(nproc)}"
+      export QMAKE_CCACHE=0
+      ./build.sh \
+        -release \
+        -expert \
+        -qmake "$PREFIX/bin/qmake" \
+        -python "$PREFIX/bin/python" \
+        -ruby "$PREFIX/bin/ruby" \
+        -with-qtbinding \
+        -libpng \
+        -libcurl \
+        -libexpat \
+        -prefix "$PREFIX" \
+        -j"$JOBS"
+      mkdir -p "$PREFIX/share/licenses/klayout"
+      cp LICENSE "$PREFIX/share/licenses/klayout/LICENSE"
+
+about:
+  homepage: https://www.klayout.de/
+  license: GPL-3.0-or-later
+  license_file: LICENSE
+  summary: KLayout layout viewer and editor with Python, Ruby, Qt bindings, and layout utilities

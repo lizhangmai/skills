@@ -5,9 +5,10 @@
 Rename `monata-sim-env` to `monata-env` and narrow the skill to managing the
 global circuit-tool runtime that Monata projects depend on.
 
-The skill must not install Python, Monata, or Python packages. It must not
-bootstrap Monata techlibs. Its live verification must test only circuit tools
-in an isolated environment.
+The skill must not install Monata or the `monata` Python package. It may
+install Python when a tool needs it, for example to provide a full-featured
+KLayout build. It must not bootstrap Monata techlibs. Its live verification
+must test only external tools in an isolated environment.
 
 ## Scope
 
@@ -22,15 +23,15 @@ in an isolated environment.
 `monata-env` does not own:
 
 - Creating or modifying a project-local `pixi.toml`.
-- Installing `python`, `monata`, or any Python package.
+- Installing `monata` or the `monata` Python package.
 - Bootstrapping `MONATA_HOME` techlibs.
 - Running demos that import `monata`.
 
 ## Runtime Design
 
-The default tool set is `ngspice` and `openvaf-r`. The detector may reduce or
-extend that set based on a workspace inspection, but it must not include Python
-packages or Monata packages.
+The default tool set is `ngspice`, `openvaf-r`, and KLayout `0.30.9`. The
+detector may reduce or extend that set based on a workspace inspection, but it
+must not include Monata packages.
 
 The default install command shape is:
 
@@ -40,7 +41,8 @@ pixi global install --environment monata-env \
   --channel https://prefix.dev/conda-forge \
   --expose ngspice=ngspice \
   --expose openvaf-r=openvaf-r \
-  ngspice openvaf-r
+  --expose klayout=klayout \
+  ngspice openvaf-r klayout=0.30.9
 ```
 
 The local artifact channel stays explicit. If a requested circuit-tool package
@@ -78,6 +80,7 @@ circuit-tool commands, starting with:
 ```bash
 ngspice --version
 openvaf-r --help
+klayout -v
 ```
 
 ## Repository Changes

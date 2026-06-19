@@ -9,7 +9,7 @@ same skills directly from the repository.
 
 ## Install
 
-Use any one of these equivalent installation paths. For Monata circuit-tool
+Use any one of these equivalent installation paths. For Monata circuit/layout-tool
 runtime setup, install only `monata-env`; it builds or reuses required
 circuit-tool packages, installs them into a pixi global environment named
 `monata-env`, exposes the tool commands, and runs direct tool smoke tests.
@@ -53,7 +53,8 @@ CONDA_BUILD_OUTPUT_DIR=<absolute-path-you-choose>
 
 Replace `<absolute-path-you-choose>` with a real absolute path before sending
 the prompt. The skill inspects the Monata workspace before choosing tool
-packages; the current Monata baseline is `ngspice` plus `openvaf-r`.
+packages; the current Monata baseline is `ngspice`, `openvaf-r`, and
+KLayout `0.30.9`.
 
 `monata-techlib` remains available as a lower-level standalone helper for
 private/offline techlib collections:
@@ -112,7 +113,7 @@ python scripts/install.py --target codex --skill monata-env --mode symlink --for
 
 | Plugin | Audience | Purpose |
 | --- | --- | --- |
-| `monata-env` | Monata users | Global circuit-tool setup for Monata: inspect the workspace, build or reuse local circuit-tool packages, install them into pixi global `monata-env`, expose tool commands, and smoke-test `ngspice`/`openvaf-r`. |
+| `monata-env` | Monata users | Global circuit/layout-tool setup for Monata: inspect the workspace, build or reuse local tool packages, install them into pixi global `monata-env`, expose tool commands, and smoke-test `ngspice`/`openvaf-r`/`klayout`. |
 | `conda-build` | Package maintainers and advanced users | Manage local self-use conda channels with `rattler-build`, including build, test, inspect, render, debug, patch, bump, rebuild, and publish guidance. |
 | `monata-techlib` | Advanced Monata users | Standalone techlib resource setup when a user wants only model-library installation outside the full Monata environment workflow. |
 
@@ -188,7 +189,7 @@ python scripts/render_skill_feedback.py
 The harness installs skills into temporary agent homes, uses fixtures under
 `tests/fixtures/`, writes ignored reports under `reports/`, and checks
 guardrails such as missing output directories, no silent global tool installs,
-minimal Monata circuit-tool builds, pixi global isolation, and techlib
+minimal Monata circuit/layout-tool builds, pixi global isolation, and techlib
 redistribution boundaries.
 
 ## Publishing Boundary

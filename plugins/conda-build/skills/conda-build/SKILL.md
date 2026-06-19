@@ -20,8 +20,9 @@ description: Manage local self-use conda channels and conda package supply-chain
   `pixi global install --channel https://prefix.dev/conda-forge rattler-build`.
 - Use `https://prefix.dev/conda-forge` as the default dependency channel unless explicit `--channel` values are given.
 - When building for a Monata runtime environment, build only the packages the
-  requested workflow needs. The current Monata baseline is `ngspice` plus
-  `openvaf-r`; do not use `--all` or `--up-to xyce` unless explicitly asked.
+  requested workflow needs. The current Monata baseline is `ngspice`,
+  `openvaf-r`, and `klayout`; do not use `--all` or `--up-to xyce` unless
+  explicitly asked.
 - Keep third-party sources outside the skill. Recipes should fetch public upstream `git` or `url` sources with pinned revisions or checksums.
 - Do not publish, upload, or authenticate against remote channels unless the user explicitly asks for that target and provides the needed credentials or trusted environment.
 - Read `references/legal-boundaries.md` before advising on redistribution, bundling, or license compatibility.
@@ -37,7 +38,7 @@ assets/recipe-sets/circuit-toolchain/recipes/
 assets/recipe-sets/circuit-toolchain/smoke-tests/
 ```
 
-It includes recipes for `boost`, `adms`, `trilinos-14.4.0`, `ngspice`, `openvaf-r`, `xdm`, `inspice`, `monata`, `vacask`, `xyce`, and `trilinos-17.1.0`.
+It includes recipes for `boost`, `adms`, `trilinos-14.4.0`, `ngspice`, `openvaf-r`, `klayout`, `xdm`, `inspice`, `monata`, `vacask`, `xyce`, and `trilinos-17.1.0`.
 
 ## Common Commands
 
@@ -52,9 +53,9 @@ Render or build the current Monata baseline from the bundled recipe set:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
-python scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r
-python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --render-only
-python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --skip-existing
+python scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout --render-only
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout --skip-existing
 ```
 
 If `rattler-build` is missing and the user approves installing the build tool

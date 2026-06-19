@@ -1,7 +1,7 @@
 {
   "name": "monata-env",
   "version": "0.2.0",
-  "description": "Set up global Monata circuit-tool dependencies with pixi global.",
+  "description": "Set up global Monata circuit and layout tool dependencies with pixi global.",
   "author": {
     "name": "lizhangmai",
     "url": "https://github.com/lizhangmai"
@@ -14,14 +14,16 @@
     "pixi",
     "ngspice",
     "openvaf",
+    "klayout",
+    "layout",
     "rattler-build",
     "conda"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Monata Env",
-    "shortDescription": "Set up Monata circuit tools",
-    "longDescription": "Inspect a Monata workspace, build or reuse required local circuit-tool packages, install them into a pixi global environment named monata-env, expose tool commands, and validate ngspice and openvaf-r without installing Python, Monata, or techlibs.",
+    "shortDescription": "Set up Monata circuit/layout tools",
+    "longDescription": "Inspect a Monata workspace, build or reuse required local circuit-tool packages, install them into a pixi global environment named monata-env, expose tool commands, and validate ngspice, openvaf-r, and KLayout without installing Monata or techlibs.",
     "developerName": "lizhangmai",
     "category": "Developer Tools",
     "capabilities": [

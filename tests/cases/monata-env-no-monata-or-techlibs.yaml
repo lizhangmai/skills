@@ -1,13 +1,13 @@
 {
-  "name": "monata-env-no-python-or-techlibs",
+  "name": "monata-env-no-monata-or-techlibs",
   "skill": "monata-env",
   "provider": "static",
   "workspace_fixture": "monata-basic",
-  "prompt": "Use the monata-env skill to install only global circuit tools. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
+  "prompt": "Use the monata-env skill to install only global circuit and layout tools. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
   "assertions": {
     "skill_must_contain": [
-      "Do not install Python",
       "Do not install Monata",
+      "Do not install the `monata` Python package",
       "Do not bootstrap Monata techlibs",
       "Do not create or modify a project-local pixi.toml"
     ],
@@ -15,6 +15,7 @@
       "pixi init",
       "pixi add",
       "monata>=0.1.1",
+      "monata =",
       "bootstrap_monata_techlibs.py",
       "write_monata_readme_demo.py",
       "TechlibRegistry",

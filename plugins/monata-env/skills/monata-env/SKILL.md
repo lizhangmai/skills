@@ -1,6 +1,6 @@
 ---
 name: monata-env
-description: Set up and validate global circuit-tool dependencies for Monata projects with pixi global. Use when a user asks an agent to install or configure Monata circuit tools; inspect a Monata repository to choose required simulator packages; build or reuse ngspice and OpenVAF/OSDI packages; install them into a pixi global environment named monata-env; expose tool commands; or validate ngspice and openvaf-r without installing Python, Monata, or techlibs.
+description: Set up and validate global circuit-tool dependencies for Monata projects with pixi global. Use when a user asks an agent to install or configure Monata circuit tools; inspect a Monata repository to choose required simulator and layout packages; build or reuse ngspice, OpenVAF/OSDI, and KLayout packages; install them into a pixi global environment named monata-env; expose tool commands; or validate ngspice, openvaf-r, and klayout without installing Monata or techlibs.
 ---
 
 # Monata Env
@@ -8,18 +8,19 @@ description: Set up and validate global circuit-tool dependencies for Monata pro
 ## Goal
 
 Create or update a pixi global environment named `monata-env` that exposes the
-circuit tools used by Monata projects. The default tool set is `ngspice` and
-`openvaf-r`.
+circuit tools used by Monata projects. The default tool set is `ngspice`,
+`openvaf-r`, and `klayout`.
 
-This skill intentionally does not manage a Monata Python runtime. It keeps
-tooling reusable across projects instead of creating a new pixi environment in
-each project directory.
+This skill intentionally does not install the Monata package while Monata is
+still under active development. It may install Python, Ruby, Qt, and other
+runtime dependencies needed by tools such as KLayout. It keeps tooling reusable
+across projects instead of creating a new pixi environment in each project
+directory.
 
 ## Rules
 
-- Do not install Python.
 - Do not install Monata.
-- Do not install Python packages.
+- Do not install the `monata` Python package.
 - Do not bootstrap Monata techlibs.
 - Do not create or modify a project-local pixi.toml.
 - Keep external simulator binaries outside the Monata Python package.
@@ -39,7 +40,11 @@ each project directory.
   `scripts/detect_monata_tools.py` from this skill; otherwise read
   `pyproject.toml`, `README.md`, `src/`, `tests/`, and `docs/`.
 - Build the smallest package set needed for the requested Monata workflow. The
-  current Monata baseline is `ngspice` plus `openvaf-r`.
+  current Monata baseline is `ngspice`, `openvaf-r`, and `klayout`.
+- Build KLayout from the public upstream repository
+  `https://github.com/KLayout/klayout/tree/v0.30.9` through the bundled
+  `klayout` recipe. Keep the recipe source remote and pinned to the `v0.30.9`
+  commit; do not depend on a local KLayout checkout.
 - If the user-provided channel already contains the detected packages, skip the
   build and do not require `rattler-build`.
 - Do not build every circuit-toolchain package, run `--all`, or build the Xyce
@@ -79,7 +84,7 @@ each project directory.
 
    Run this from the installed or cloned `monata-env` skill directory. If a
    Monata workspace cannot be inspected, use the current baseline package set:
-   `ngspice openvaf-r`.
+   `ngspice openvaf-r klayout`.
 
 5. Resolve the conda-build helper. Prefer a local sibling checkout:
 
@@ -104,7 +109,8 @@ each project directory.
    python scripts/rattler_channel.py check-channel \
      --recipe-set circuit-toolchain \
      --package ngspice \
-     --package openvaf-r
+     --package openvaf-r \
+     --package klayout
    ```
 
    Run this from the resolved `conda-build` skill directory. Use the detector
@@ -119,6 +125,7 @@ each project directory.
      --recipe-set circuit-toolchain \
      --package ngspice \
      --package openvaf-r \
+     --package klayout \
      --skip-existing
    ```
 
@@ -139,7 +146,8 @@ each project directory.
      --channel https://prefix.dev/conda-forge \
      --expose ngspice=ngspice \
      --expose openvaf-r=openvaf-r \
-     ngspice openvaf-r
+     --expose klayout=klayout \
+     ngspice openvaf-r klayout=0.30.9
    ```
 
    Use the detector output instead of hard-coding this list when the workspace
@@ -151,6 +159,7 @@ each project directory.
    ```bash
    ngspice --version
    openvaf-r --help
+   klayout -v
    ```
 
 ## Existing Circuit-Tool Environment
@@ -161,10 +170,11 @@ the commands directly and report that no pixi global install was needed:
 ```bash
 ngspice --version
 openvaf-r --help
+klayout -v
 ```
 
 Use this shortcut only when all required executables are already on `PATH`.
-Do not install Python, Monata, Python packages, or techlibs afterward.
+Do not install Monata, the `monata` Python package, or techlibs afterward.
 
 ## Optional Packages
 

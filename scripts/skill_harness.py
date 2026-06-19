@@ -10,6 +10,7 @@ changing the case format.
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CASES_DIR = REPO_ROOT / "tests" / "cases"
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 DEFAULT_REPORTS_DIR = REPO_ROOT / "reports" / "skill-harness"
+DEFAULT_SINGULARITY_BIN = "/opt/singularity-ce/4.1.1/bin/singularity"
 
 
 class HarnessFailure(Exception):
@@ -203,6 +205,110 @@ def run_static_provider(case: Dict, temp_root: Path, env: Dict[str, str], log_pa
     }
 
 
+def build_singularity_command(case: Dict, temp_root: Path, workspace: Path) -> List[str]:
+    singularity_bin = str(case.get("singularity_bin") or DEFAULT_SINGULARITY_BIN)
+    image = str(case.get("singularity_image") or "docker://ubuntu:24.04")
+    container_command = case.get("singularity_command") or ["bash", "-lc", "true"]
+    if isinstance(container_command, str):
+        container_command = ["bash", "-lc", container_command]
+    if not isinstance(container_command, list):
+        raise HarnessFailure("singularity_command must be a string or list")
+
+    home_dir = temp_root / "singularity-home"
+    cache_dir = home_dir / ".cache"
+    channel_dir = temp_root / "singularity-channel"
+    for path in [home_dir, cache_dir, channel_dir]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    env_prefix = [
+        "env",
+        "HOME=/tmp/skill-home",
+        "PIXI_HOME=/tmp/skill-home/.pixi",
+        "XDG_CACHE_HOME=/tmp/skill-home/.cache",
+        "RATTLER_CACHE_DIR=/tmp/skill-home/.cache/rattler",
+        "CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel",
+    ]
+
+    return [
+        singularity_bin,
+        "exec",
+        "--cleanenv",
+        "--containall",
+        "--home",
+        f"{home_dir}:/tmp/skill-home",
+        "--bind",
+        f"{REPO_ROOT}:/mnt/skills",
+        "--bind",
+        f"{workspace}:/mnt/project",
+        "--bind",
+        f"{channel_dir}:/tmp/skill-channel",
+        image,
+        *env_prefix,
+        *[str(part) for part in container_command],
+    ]
+
+
+def run_singularity_provider(case: Dict, provider: str, temp_root: Path, env: Dict[str, str], log_path: Path, workspace: Path) -> Dict:
+    install_targets = case.get("install_targets", ["codex"])
+    if not isinstance(install_targets, list):
+        raise HarnessFailure("install_targets must be a list")
+
+    skill = case["skill"]
+    prompt = str(case.get("prompt", ""))
+    install_output = run_install(skill, install_targets, temp_root, env)
+    skill_text = read_skill_text(skill)
+    command = build_singularity_command(case, temp_root, workspace)
+    command_preview = shlex.join(command)
+    combined_text = "\n".join([prompt, skill_text, "\n".join(install_output), command_preview])
+
+    assertions = case.get("assertions", {})
+    errors: List[str] = []
+    assert_contains(errors, skill_text, assertions.get("skill_must_contain", []), "skill")
+    assert_not_contains(errors, skill_text, assertions.get("skill_must_not_contain", []), "skill")
+    assert_contains(errors, prompt, assertions.get("prompt_must_contain", []), "prompt")
+    assert_contains(errors, combined_text, assertions.get("must_contain", []), "combined")
+    assert_not_contains(errors, combined_text, assertions.get("must_not_contain", []), "combined")
+
+    output = ""
+    returncode = 0
+    if provider == "singularity":
+        singularity_bin = Path(command[0])
+        if not singularity_bin.exists():
+            errors.append(f"Singularity executable not found: {singularity_bin}")
+        if not case.get("singularity_image"):
+            errors.append("singularity provider requires singularity_image")
+        if not case.get("singularity_command"):
+            errors.append("singularity provider requires singularity_command")
+        if not errors:
+            result = subprocess.run(
+                command,
+                cwd=str(workspace),
+                env=env,
+                universal_newlines=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            output = result.stdout
+            returncode = result.returncode
+            if result.returncode != 0:
+                errors.append(f"singularity command failed with exit {result.returncode}: {result.stdout}")
+
+    log_text = command_log_text(log_path)
+    assert_contains(errors, log_text, assertions.get("required_commands", []), "command log")
+    assert_not_contains(errors, log_text, assertions.get("forbidden_commands", []), "command log")
+
+    return {
+        "provider": provider,
+        "install_output": install_output,
+        "command_preview": command_preview,
+        "command_output": output,
+        "command_returncode": returncode,
+        "command_log": log_text,
+        "errors": errors,
+    }
+
+
 def installed_skill_dir(skill: str, target: str, env: Dict[str, str]) -> Path:
     if target == "codex":
         return Path(env["CODEX_HOME"]) / "skills" / skill
@@ -255,6 +361,8 @@ def run_case(path: Path, provider_override: str, reports_dir: Path, keep_temp: b
         if provider in {"static", "prompt-only"}:
             result = run_static_provider(case, temp_root, env, log_path)
             result["provider"] = provider
+        elif provider in {"singularity-dry-run", "singularity"}:
+            result = run_singularity_provider(case, provider, temp_root, env, log_path, workspace)
         else:
             result = run_live_provider(case, provider)
 

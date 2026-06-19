@@ -1,0 +1,16 @@
+{
+  "name": "monata-env-singularity-isolation",
+  "skill": "monata-env",
+  "provider": "singularity-dry-run",
+  "workspace_fixture": "monata-basic",
+  "prompt": "Use the monata-env skill in an isolated Singularity test context. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
+  "assertions": {
+    "must_contain": [
+      "singularity",
+      "--cleanenv",
+      "--containall",
+      "PIXI_HOME=/tmp/skill-home/.pixi",
+      "CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel"
+    ]
+  }
+}

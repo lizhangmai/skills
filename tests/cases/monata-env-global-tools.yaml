@@ -1,0 +1,30 @@
+{
+  "name": "monata-env-global-tools",
+  "skill": "monata-env",
+  "provider": "static",
+  "workspace_fixture": "monata-basic",
+  "prompt": "Use the monata-env skill to set up global Monata circuit tools. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
+  "env": {
+    "CONDA_BUILD_OUTPUT_DIR": "/tmp/monata-channel"
+  },
+  "fake_bins": {
+    "pixi": {"stdout": "pixi 0.0.0-test"},
+    "git": {"stdout": "git version 0.0.0-test"},
+    "rattler-build": {"stdout": "rattler-build 0.0.0-test"}
+  },
+  "assertions": {
+    "skill_must_contain": [
+      "pixi global install --environment monata-env",
+      "--channel \"file://$CONDA_BUILD_OUTPUT_DIR\"",
+      "--channel https://prefix.dev/conda-forge",
+      "--expose ngspice=ngspice",
+      "--expose openvaf-r=openvaf-r",
+      "ngspice --version",
+      "openvaf-r --help"
+    ],
+    "installed_files": [
+      "SKILL.md",
+      "scripts/detect_monata_tools.py"
+    ]
+  }
+}

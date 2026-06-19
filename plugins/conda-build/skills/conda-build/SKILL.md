@@ -10,7 +10,7 @@ description: Manage local self-use conda channels and conda package supply-chain
 - Treat this as a `rattler-build` supply-chain skill, not a circuit-only builder.
 - Own conda package artifacts, recipe rendering/building/testing/inspection, and
   local channel maintenance. Do not create user application pixi projects or
-  install PyPI `monata`; that belongs to `monata-sim-env`.
+  install PyPI `monata`; `monata-env` only installs global circuit tools.
 - Before running a build or rebuild, require the user to provide `CONDA_BUILD_OUTPUT_DIR`, `CONDA_BLD_PATH`, or `--output-dir` for the final artifact channel. Do not invent a default output directory. If the user did not specify one, ask for it before executing build or test commands.
 - Check an existing output channel before building when the caller wants reuse.
   Use `check-channel`, then build only missing packages with `--skip-existing`

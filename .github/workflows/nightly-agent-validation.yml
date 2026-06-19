@@ -39,7 +39,7 @@ jobs:
         run: |
           if command -v claude >/dev/null 2>&1; then
             claude plugin validate .
-            claude plugin validate plugins/monata-sim-env
+            claude plugin validate plugins/monata-env
             claude plugin validate plugins/conda-build
             claude plugin validate plugins/monata-techlib
           else

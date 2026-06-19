@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "monata-sim-env",
+      "name": "monata-env",
       "source": {
         "source": "local",
-        "path": "./plugins/monata-sim-env"
+        "path": "./plugins/monata-env"
       },
       "policy": {
         "installation": "AVAILABLE",

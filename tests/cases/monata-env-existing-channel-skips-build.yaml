@@ -1,9 +1,9 @@
 {
-  "name": "monata-sim-env-existing-channel-skips-build",
-  "skill": "monata-sim-env",
+  "name": "monata-env-existing-channel-skips-build",
+  "skill": "monata-env",
   "provider": "static",
   "workspace_fixture": "monata-basic",
-  "prompt": "Use the monata-sim-env skill to set up this Monata environment. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
+  "prompt": "Use the monata-env skill to set up global Monata circuit tools. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
   "env": {
     "CONDA_BUILD_OUTPUT_DIR": "/tmp/monata-channel"
   },

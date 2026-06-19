@@ -6,9 +6,9 @@
   },
   "plugins": [
     {
-      "name": "monata-sim-env",
-      "source": "./plugins/monata-sim-env",
-      "description": "Set up a complete Monata simulation environment with pixi, a local circuit-tool conda channel, PTM techlibs, and a runnable README demo."
+      "name": "monata-env",
+      "source": "./plugins/monata-env",
+      "description": "Set up global Monata circuit-tool dependencies with pixi global, a local circuit-tool conda channel, and direct tool smoke tests."
     },
     {
       "name": "conda-build",

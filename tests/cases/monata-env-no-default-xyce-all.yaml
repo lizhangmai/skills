@@ -1,9 +1,9 @@
 {
-  "name": "monata-sim-env-no-default-xyce-all",
-  "skill": "monata-sim-env",
+  "name": "monata-env-no-default-xyce-all",
+  "skill": "monata-env",
   "provider": "static",
   "workspace_fixture": "monata-basic",
-  "prompt": "Use the monata-sim-env skill to set up the current Monata project. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
+  "prompt": "Use the monata-env skill to set up global Monata circuit tools. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
   "assertions": {
     "skill_must_contain": [
       "Do not build every circuit-toolchain package",

@@ -37,7 +37,7 @@ entries and, when Monata is installed, that `TechlibRegistry` can load them.
 - Reject simulator binaries and generated model artifacts such as `ngspice`,
   `openvaf`, `xyce`, `.so`, `.dll`, `.dylib`, `.exe`, and `.osdi` files.
 - Do not create a pixi environment, build conda packages, install ngspice, or
-  compile OpenVAF/OSDI artifacts. Use `monata-sim-env` for runtime environment
+  compile OpenVAF/OSDI artifacts. Use `monata-env` for global circuit-tool
   setup and `conda-build` for package builds.
 - Prefer copy mode for end users and symlink mode only for local development.
 - If the user asks for a public redistributable techlib package, install only
@@ -149,7 +149,7 @@ PY
 ```
 
 If Monata is not installed, report filesystem verification only and suggest
-running `monata-sim-env` first when the user also needs a simulator runtime.
+running `monata-env` first when the user also needs global circuit tools.
 
 ## Feedback Protocol
 

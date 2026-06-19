@@ -1,9 +1,9 @@
 {
-  "name": "monata-sim-env-missing-output-dir",
-  "skill": "monata-sim-env",
+  "name": "monata-env-missing-output-dir",
+  "skill": "monata-env",
   "provider": "static",
   "workspace_fixture": "monata-basic",
-  "prompt": "Use the monata-sim-env skill to set up this complete Monata environment and run the README demo.",
+  "prompt": "Use the monata-env skill to set up global Monata circuit tools.",
   "fake_bins": {
     "pixi": {"stdout": "pixi 0.0.0-test"},
     "git": {"stdout": "git version 0.0.0-test"},
@@ -20,10 +20,9 @@
       "scripts/detect_monata_tools.py"
     ],
     "forbidden_commands": [
-      "pixi init",
-      "pixi add",
       "rattler_channel.py build",
-      "rattler-build build"
+      "rattler-build build",
+      "pixi global install --environment monata-env"
     ]
   }
 }

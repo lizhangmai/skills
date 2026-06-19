@@ -1,7 +1,7 @@
 {
-  "name": "monata-sim-env",
+  "name": "monata-env",
   "version": "0.2.0",
-  "description": "Set up complete local Monata simulation environments with pixi, circuit tools, techlibs, and a runnable demo.",
+  "description": "Set up global Monata circuit-tool dependencies with pixi global.",
   "author": {
     "name": "lizhangmai",
     "url": "https://github.com/lizhangmai"
@@ -19,9 +19,9 @@
   ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "Monata Sim Env",
-    "shortDescription": "Set up and verify Monata",
-    "longDescription": "Inspect a Monata workspace, build or reuse required local circuit-tool packages, create a project-local pixi environment, install Monata, bootstrap PTM_MG and PTM_BULK techlibs under MONATA_HOME, generate the Monata README demo, and run the demo successfully.",
+    "displayName": "Monata Env",
+    "shortDescription": "Set up Monata circuit tools",
+    "longDescription": "Inspect a Monata workspace, build or reuse required local circuit-tool packages, install them into a pixi global environment named monata-env, expose tool commands, and validate ngspice and openvaf-r without installing Python, Monata, or techlibs.",
     "developerName": "lizhangmai",
     "category": "Developer Tools",
     "capabilities": [
@@ -33,7 +33,7 @@
     "privacyPolicyURL": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
     "termsOfServiceURL": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
     "defaultPrompt": [
-      "Set up the complete Monata simulation environment in this directory, including techlibs and the README demo."
+      "Set up global Monata circuit tools with pixi global in the monata-env environment."
     ],
     "brandColor": "#2563EB",
     "screenshots": []

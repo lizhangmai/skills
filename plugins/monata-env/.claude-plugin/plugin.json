@@ -1,0 +1,12 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "monata-env",
+  "description": "Set up global Monata circuit-tool dependencies with pixi global.",
+  "version": "0.2.0",
+  "author": {
+    "name": "lizhangmai"
+  },
+  "skills": [
+    "./skills/monata-env"
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Monata Env"
+  short_description: "Set up Monata circuit tools"
+  default_prompt: "Use $monata-env to set up global Monata circuit tools: build or reuse required circuit-tool packages, install them into the pixi global monata-env environment, expose ngspice and openvaf-r, and validate those tool commands. If I did not provide CONDA_BUILD_OUTPUT_DIR explicitly, ask me before running build, pixi, or install commands. Do not install Python, Monata, Python packages, or techlibs."

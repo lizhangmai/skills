@@ -124,6 +124,21 @@ directory.
      --format json
    ```
 
+   The planner defaults optional upstream-installed checks to the `basic`
+   profile. If the user explicitly accepts longer runtime and extra
+   dependency/display risk, request the full upstream profile in the plan:
+
+   ```bash
+   python scripts/plan_monata_env.py \
+     --root "<project-workspace>" \
+     --output-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --local-source klayout="$(realpath ../circuit/klayout)" \
+     --local-source xschem="$(realpath ../circuit/xschem)" \
+     --upstream-profile full \
+     --write-manifest \
+     --format json
+   ```
+
    If network access to container registries is unreliable and the user has a
    local Singularity image for live validation, pass it into the planner so the
    generated test-isolation decision uses that `.sif`:
@@ -217,7 +232,7 @@ directory.
    emits `commands.install_smoke_upstream`; that command binds each source
    read-only under `/mnt/sources/<package>`, regenerates the manifest with
    container-local `--local-source` paths, and runs `install`, `smoke`, and
-   `upstream_installed_tests`.
+   `upstream_installed_tests` with the requested upstream profile.
 
    Review `plan.decisions` with the user when there is meaningful choice:
    source policy, pixi global writes, test isolation, and upstream test

@@ -306,6 +306,64 @@ def test_plan_recommends_upstream_installed_tests_when_sources_are_provided(tmp_
     assert f"--xschem-source {xschem_source.resolve()}" in command
 
 
+def test_plan_can_select_full_upstream_installed_profile(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    image = tmp_path / "monata-env-python.sif"
+    host_pixi_root = tmp_path / "host-pixi"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    image.write_text("sif", encoding="utf-8")
+    (host_pixi_root / "bin").mkdir(parents=True)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            "--container-image",
+            image,
+            "--host-pixi-root",
+            host_pixi_root,
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--local-source",
+            f"xschem={xschem_source}",
+            "--upstream-profile",
+            "full",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["upstream_profile"] == "full"
+    command = " ".join(data["commands"]["upstream_installed_tests"])
+    assert "--profile full" in command
+    runbook = {step["id"]: step for step in data["runbook"]}
+    assert runbook["upstream_installed_tests"]["timeout_seconds"] == 7200
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    assert decisions["upstream_test_profile"]["default"] == "full"
+    profile_options = {option["id"]: option for option in decisions["upstream_test_profile"]["options"]}
+    assert profile_options["basic"]["recommended"] is False
+    assert profile_options["full"]["recommended"] is True
+    upstream = {option["id"]: option for option in decisions["test_isolation"]["options"]}["singularity"]["commands"][
+        "install_smoke_upstream"
+    ]
+    assert "--upstream-profile full" in upstream
+    assert "--step install --step smoke --step upstream_installed_tests" in upstream
+
+
 def test_plan_uses_available_conda_build_helper_path(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"

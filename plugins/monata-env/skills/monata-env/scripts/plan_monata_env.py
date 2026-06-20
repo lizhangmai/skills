@@ -254,14 +254,14 @@ def check_channel_command(packages, output_dir, helper_script):
     return command
 
 
-def upstream_installed_test_command(local_sources):
+def upstream_installed_test_command(local_sources, upstream_profile):
     command = [
         sys.executable,
         str(SCRIPT_DIR / "test_monata_env_upstream.py"),
         "--format",
         "json",
         "--profile",
-        "basic",
+        upstream_profile,
     ]
     if "klayout" in local_sources:
         command.extend(["--klayout-source", str(local_sources["klayout"])])
@@ -309,7 +309,20 @@ def record_after_command(
     }
 
 
-def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_path, upstream_recommended):
+def upstream_timeout(upstream_profile):
+    return 7200 if upstream_profile == "full" else 1800
+
+
+def runbook(
+    commands,
+    packages,
+    build_packages,
+    log_dir,
+    artifact_dir,
+    manifest_path,
+    upstream_recommended,
+    upstream_profile,
+):
     check_stdout = log_dir / "monata-env-check-channel.json"
     check_stderr = log_dir / "monata-env-check-channel.err"
     check_status = log_dir / "monata-env-check-channel.status.json"
@@ -418,7 +431,7 @@ def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_
             "recommended": upstream_recommended,
             "requires_confirmation": True,
             "depends_on": ["smoke"],
-            "timeout_seconds": 1800,
+            "timeout_seconds": upstream_timeout(upstream_profile),
             "command": commands["upstream_installed_tests"],
             "stdout_path": str(upstream_json),
             "stderr_path": str(upstream_stderr),
@@ -518,6 +531,7 @@ def container_install_smoke_command(
     state_dir,
     local_source_paths=None,
     include_upstream=False,
+    upstream_profile="basic",
 ):
     if not host_pixi_root:
         return ""
@@ -545,6 +559,7 @@ def container_install_smoke_command(
             container_source = f"/mnt/sources/{package}"
             source_binds.append(f"--bind {shlex.quote(f'{source_path}:{container_source}:ro')} ")
             source_options.append(f"--local-source {package}={container_source} ")
+        source_options.append(f"--upstream-profile {upstream_profile} ")
     runbook_steps = "--step install --step smoke"
     if include_upstream:
         runbook_steps += " --step upstream_installed_tests"
@@ -589,6 +604,7 @@ def decisions(
     helper_script,
     container_state_dir,
     test_image,
+    upstream_profile,
     host_pixi_root=None,
 ):
     source_paths = {package: str(path) for package, path in local_source_paths.items()}
@@ -621,6 +637,7 @@ def decisions(
         container_state_dir,
         local_source_paths=local_source_paths,
         include_upstream=bool(local_source_paths),
+        upstream_profile=upstream_profile,
     )
     if live_upstream_command:
         isolated_commands["install_smoke_upstream"] = live_upstream_command
@@ -725,7 +742,7 @@ def decisions(
         {
             "id": "upstream_test_profile",
             "prompt": "How much upstream project test coverage should run after installing tools?",
-            "default": "basic" if upstream_recommended else "skip",
+            "default": upstream_profile if upstream_recommended else "skip",
             "options": [
                 {
                     "id": "skip",
@@ -736,13 +753,13 @@ def decisions(
                 {
                     "id": "basic",
                     "label": "Basic upstream-installed tests",
-                    "recommended": upstream_recommended,
+                    "recommended": upstream_recommended and upstream_profile == "basic",
                     "effect": "Runs safe upstream subsets against installed KLayout and Xschem when source checkouts exist.",
                 },
                 {
                     "id": "full",
                     "label": "Full upstream regressions",
-                    "recommended": False,
+                    "recommended": upstream_recommended and upstream_profile == "full",
                     "effect": "Runs broader upstream suites only after explicit user approval.",
                 },
             ],
@@ -805,6 +822,7 @@ def create_plan(
     session_dir=None,
     container_state_dir=None,
     test_image_output=None,
+    upstream_profile="basic",
     host_pixi_root=None,
 ):
     detected = detect(root)
@@ -854,7 +872,7 @@ def create_plan(
         "build": build_command(build_packages, output_dir, selected_local_sources, helper_script) if build_packages else [],
         "install": install_command(packages, output_dir, env_name),
         "smoke": [sys.executable, str(SCRIPT_DIR / "smoke_monata_env_tools.py"), "--format", "json"],
-        "upstream_installed_tests": upstream_installed_test_command(local_source_paths),
+        "upstream_installed_tests": upstream_installed_test_command(local_source_paths, upstream_profile),
     }
     profiles = test_profiles(local_source_paths)
     test_image = test_image_plan(
@@ -869,6 +887,7 @@ def create_plan(
         "mode": "ai-native-session",
         "root": str(Path(root).resolve()),
         "env_name": env_name,
+        "upstream_profile": upstream_profile,
         "packages": packages,
         "detector": detected,
         "channel": channel,
@@ -898,6 +917,7 @@ def create_plan(
                 resolved_container_state_dir,
                 local_source_paths=local_source_paths,
                 include_upstream=bool(local_source_paths),
+                upstream_profile=upstream_profile,
             ),
         },
         "local_sources": local_sources,
@@ -917,6 +937,7 @@ def create_plan(
             helper_script,
             resolved_container_state_dir,
             test_image,
+            upstream_profile,
             resolved_host_pixi_root,
         ),
         "commands": commands,
@@ -928,6 +949,7 @@ def create_plan(
             output_dir,
             manifest_path,
             profiles["upstream_installed"]["recommended"],
+            upstream_profile,
         ),
         "test_profiles": profiles,
         "build_needed": bool(build_packages),
@@ -962,6 +984,12 @@ def parse_args():
         "--test-image-output",
         type=Path,
         help="Output .sif path for a dedicated monata-env live-test image.",
+    )
+    parser.add_argument(
+        "--upstream-profile",
+        choices=("basic", "full"),
+        default="basic",
+        help="Upstream-installed test profile to plan when local sources are provided.",
     )
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
@@ -998,16 +1026,17 @@ def write_manifest_seed(plan):
 def main():
     args = parse_args()
     plan = create_plan(
-        args.root,
-        args.output_dir.resolve(),
-        args.local_source,
-        args.env_name,
-        args.conda_build_helper,
-        args.container_image,
-        args.session_dir,
-        args.container_state_dir,
-        args.test_image_output,
-        args.host_pixi_root,
+        root=args.root,
+        output_dir=args.output_dir.resolve(),
+        local_source_values=args.local_source,
+        env_name=args.env_name,
+        conda_build_helper=args.conda_build_helper,
+        container_image=args.container_image,
+        session_dir=args.session_dir,
+        container_state_dir=args.container_state_dir,
+        test_image_output=args.test_image_output,
+        upstream_profile=args.upstream_profile,
+        host_pixi_root=args.host_pixi_root,
     )
     if args.write_manifest:
         write_manifest_seed(plan)

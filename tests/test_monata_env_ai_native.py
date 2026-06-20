@@ -1813,6 +1813,78 @@ def test_network_failure_recovery_replans_with_user_provided_local_sources(tmp_p
     assert f"--xschem-source {xschem_source.resolve()}" in upstream_command
 
 
+def test_network_failure_recovery_replans_with_user_provided_source_archives(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    klayout_archive = tmp_path / "klayout-v0.30.9.tar.gz"
+    xschem_archive = tmp_path / "xschem-3.4.7.tar.gz"
+    write_monata_workspace(workspace)
+    write_source_archive(klayout_archive, "klayout-0.30.9")
+    write_source_archive(xschem_archive, "xschem-3.4.7")
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "build",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import sys; print('could not resolve host for source download', file=sys.stderr); sys.exit(1)",
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    failure = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert failure.returncode == 1, failure.stdout
+    action = json.loads(failure.stdout)["next_actions"][0]
+    archive_option = {option["id"]: option for option in action["decision"]["options"]}["provide_source_archive"]
+    replan_args = [
+        part.replace("<klayout-archive>", str(klayout_archive.resolve())).replace(
+            "<xschem-archive>", str(xschem_archive.resolve())
+        )
+        for part in archive_option["replan_arguments"]
+    ]
+    recovered = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            *replan_args,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert recovered.returncode == 0, recovered.stdout
+    data = json.loads(recovered.stdout)
+    archive_question = data["questions"][0]
+    assert archive_question["id"] == "local_source_archive_trust"
+    assert archive_question["archive_sources"]["klayout"]["path"] == str(klayout_archive.resolve())
+    assert archive_question["archive_sources"]["xschem"]["path"] == str(xschem_archive.resolve())
+    build_command = " ".join(data["commands"]["build"])
+    assert f"--local-source klayout={klayout_archive.resolve()}" in build_command
+    assert f"--local-source xschem={xschem_archive.resolve()}" in build_command
+    assert "--local-source-ref klayout=v0.30.9" not in build_command
+    assert "--local-source-ref xschem=3.4.7" not in build_command
+    assert data["commands"]["upstream_installed_tests"] == []
+
+
 def test_execute_runbook_suggests_helper_resolution_when_helper_script_is_missing(tmp_path):
     plan_path = tmp_path / "plan.json"
     missing_helper = tmp_path / "missing-rattler-channel.py"
@@ -1846,6 +1918,12 @@ def test_execute_runbook_suggests_helper_resolution_when_helper_script_is_missin
 
 def test_execute_runbook_suggests_worktree_for_source_ref_mismatch(tmp_path):
     plan_path = tmp_path / "plan.json"
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    klayout_source = tmp_path / "klayout"
+    write_monata_workspace(workspace)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
     plan_path.write_text(
         json.dumps(
             {
@@ -1858,6 +1936,10 @@ def test_execute_runbook_suggests_worktree_for_source_ref_mismatch(tmp_path):
                             sys.executable,
                             "-c",
                             "import sys; print('local source does not match required ref v0.30.9', file=sys.stderr); sys.exit(1)",
+                            "--local-source",
+                            f"klayout={klayout_source.resolve()}",
+                            "--local-source-ref",
+                            "klayout=v0.30.9",
                         ],
                     }
                 ]
@@ -1883,6 +1965,39 @@ def test_execute_runbook_suggests_worktree_for_source_ref_mismatch(tmp_path):
         "provide_corrected_source",
         "provide_source_archive",
     ]
+    source_option = {option["id"]: option for option in action["decision"]["options"]}["create_detached_worktree"]
+    worktree_command = source_option["worktree_commands"]["klayout"]
+    assert worktree_command[:5] == ["git", "-C", str(klayout_source.resolve()), "worktree", "add"]
+    assert "--detach" in worktree_command
+    assert worktree_command[-1] == "v0.30.9"
+
+    worktree_result = run(worktree_command)
+
+    assert worktree_result.returncode == 0, worktree_result.stdout
+    replan_args = source_option["replan_arguments"]
+    recovered = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            *replan_args,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert recovered.returncode == 0, recovered.stdout
+    data = json.loads(recovered.stdout)
+    assert data["local_sources"]["klayout"]["status"] == "ok"
+    assert data["questions"] == []
+    build_command = " ".join(data["commands"]["build"])
+    assert "--local-source klayout=" in build_command
+    assert "--local-source-ref klayout=v0.30.9" in build_command
 
 
 def test_execute_runbook_suggests_tool_inspection_for_smoke_failure(tmp_path):

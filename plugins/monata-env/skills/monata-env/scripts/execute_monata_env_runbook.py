@@ -2,6 +2,7 @@
 """Execute a monata-env planner runbook and record each executed step."""
 
 import argparse
+import hashlib
 import json
 import shlex
 import subprocess
@@ -232,6 +233,66 @@ def upstream_rerun_command(step, timeout):
     return shlex.join(command)
 
 
+def keyed_values(command, flag):
+    values = {}
+    parts = [str(part) for part in command or []]
+    for index, part in enumerate(parts):
+        if part == flag and index + 1 < len(parts):
+            value = parts[index + 1]
+        elif part.startswith(f"{flag}="):
+            value = part.split("=", 1)[1]
+        else:
+            continue
+        if "=" not in value:
+            continue
+        package, payload = value.split("=", 1)
+        if package and payload:
+            values[package] = payload
+    return values
+
+
+def recommended_worktree_path(package, target_ref, source_path):
+    safe_ref = str(target_ref).replace("/", "-")
+    source_key = hashlib.sha256(str(Path(source_path).expanduser().resolve()).encode("utf-8")).hexdigest()[:8]
+    return f"/tmp/monata-sources/{package}-{safe_ref}-{source_key}"
+
+
+def source_ref_repair_context(step):
+    command = step.get("original_command") or step.get("command") or []
+    local_sources = keyed_values(command, "--local-source")
+    local_source_refs = keyed_values(command, "--local-source-ref")
+    context = {}
+    for package, source_path in local_sources.items():
+        target_ref = local_source_refs.get(package)
+        if not target_ref:
+            continue
+        resolved_source = str(Path(source_path).expanduser().resolve())
+        recommended_worktree = recommended_worktree_path(package, target_ref, resolved_source)
+        context[package] = {
+            "source_path": resolved_source,
+            "target_ref": target_ref,
+            "recommended_worktree": recommended_worktree,
+            "worktree_command": [
+                "git",
+                "-C",
+                resolved_source,
+                "worktree",
+                "add",
+                "--detach",
+                recommended_worktree,
+                target_ref,
+            ],
+        }
+    return context
+
+
+def replan_arguments_for_sources(sources):
+    args = []
+    for package, source_path in sources.items():
+        args.extend(["--local-source", f"{package}={source_path}"])
+    return args
+
+
 def next_actions_for_failure(step, item):
     if item.get("status") != "executed":
         return []
@@ -288,6 +349,20 @@ def next_actions_for_failure(step, item):
             }
         )
     if "does not match required ref" in text or "target-ref-missing" in text:
+        repair_context = source_ref_repair_context(step)
+        packages = list(repair_context) or ["klayout", "xschem"]
+        worktree_sources = {
+            package: item["recommended_worktree"]
+            for package, item in repair_context.items()
+        }
+        corrected_placeholders = {
+            package: f"<{package}-source>"
+            for package in packages
+        }
+        archive_placeholders = {
+            package: f"<{package}-archive>"
+            for package in packages
+        }
         actions.append(
             {
                 "id": "create-versioned-source-worktree",
@@ -303,18 +378,26 @@ def next_actions_for_failure(step, item):
                             "id": "create_detached_worktree",
                             "label": "Create detached worktree",
                             "requires_user_input": True,
+                            "worktree_commands": {
+                                package: item["worktree_command"]
+                                for package, item in repair_context.items()
+                            },
+                            "recommended_sources": worktree_sources,
+                            "replan_arguments": replan_arguments_for_sources(worktree_sources),
                             "effect": "Keeps the user's current checkout untouched and builds from the recipe tag.",
                         },
                         {
                             "id": "provide_corrected_source",
                             "label": "Provide corrected checkout",
                             "requires_user_input": True,
+                            "replan_arguments": replan_arguments_for_sources(corrected_placeholders),
                             "effect": "Use a user-provided local checkout already at the required upstream ref.",
                         },
                         {
                             "id": "provide_source_archive",
                             "label": "Provide source archive",
                             "requires_user_input": True,
+                            "replan_arguments": replan_arguments_for_sources(archive_placeholders),
                             "effect": "Build from a trusted local archive when git ref validation is not possible.",
                         },
                     ],

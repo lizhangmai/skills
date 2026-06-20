@@ -2,6 +2,7 @@
 """Plan an AI-native monata-env setup session."""
 
 import argparse
+import hashlib
 import json
 import shlex
 import shutil
@@ -43,6 +44,12 @@ SOURCE_ARCHIVE_SUFFIXES = (
     ".txz",
     ".zip",
 )
+
+
+def recommended_worktree_path(package, target_ref, source_path):
+    safe_ref = str(target_ref).replace("/", "-")
+    source_key = hashlib.sha256(str(Path(source_path).expanduser().resolve()).encode("utf-8")).hexdigest()[:8]
+    return f"/tmp/monata-sources/{package}-{safe_ref}-{source_key}"
 
 
 def command_string(command):
@@ -189,7 +196,7 @@ def local_source_status(package, path):
         item["status"] = "ok"
     else:
         item["status"] = "ref-mismatch"
-        item["recommended_worktree"] = f"/tmp/monata-sources/{package}-{target_ref}"
+        item["recommended_worktree"] = recommended_worktree_path(package, target_ref, path)
         item["worktree_command"] = [
             "git",
             "-C",

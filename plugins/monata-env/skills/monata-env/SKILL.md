@@ -433,12 +433,14 @@ directory.
    test assets.
 
    If a provided checkout is not currently at the recipe version, do not change
-   the user's checkout in place. Create a temporary detached worktree at the
-   target tag and pass that worktree path:
+   the user's checkout in place. Use the planner/executor-provided
+   `worktree_commands`, `recommended_sources`, and `replan_arguments`; their
+   temporary worktree paths include a source-path hash to avoid collisions with
+   other sessions. A generated command will look like:
 
    ```bash
-   git -C ../circuit/klayout worktree add --detach /tmp/monata-sources/klayout-v0.30.9 v0.30.9
-   git -C ../circuit/xschem worktree add --detach /tmp/monata-sources/xschem-3.4.7 3.4.7
+   git -C ../circuit/klayout worktree add --detach /tmp/monata-sources/klayout-v0.30.9-<hash> v0.30.9
+   git -C ../circuit/xschem worktree add --detach /tmp/monata-sources/xschem-3.4.7-<hash> 3.4.7
    ```
 
    If `rattler-build` is missing but `pixi` is available, ask before installing

@@ -12,6 +12,8 @@
       "--cleanenv",
       "--containall",
       "scripts/skill_container.py",
+      "docker://python:3.12-slim",
+      "--container-image",
       "--require-command",
       "missing-required-commands",
       "choose-container-with-required-commands",

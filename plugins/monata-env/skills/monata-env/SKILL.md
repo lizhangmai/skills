@@ -120,6 +120,19 @@ directory.
      --format json
    ```
 
+   If network access to container registries is unreliable and the user has a
+   local Singularity image for live validation, pass it into the planner so the
+   generated test-isolation decision uses that `.sif`:
+
+   ```bash
+   python scripts/plan_monata_env.py \
+     --root "<project-workspace>" \
+     --output-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --container-image /path/to/monata-env-python-3.12-slim.sif \
+     --write-manifest \
+     --format json
+   ```
+
    Review `plan.decisions` with the user when there is meaningful choice:
    source policy, pixi global writes, test isolation, and upstream test
    profile. Treat `plan.runbook` as the authoritative execution sequence. Each
@@ -416,6 +429,7 @@ Use the skill-local container wrapper for live setup checks:
 python scripts/skill_container.py \
   --state-dir /tmp/monata-env-skill-test \
   --workspace "<project-workspace>" \
+  --image docker://python:3.12-slim \
   --require-command python3 \
   --dry-run \
   -- \
@@ -427,6 +441,9 @@ temporary state directories. Add one `--require-command` per tool that must
 exist inside the container before the command starts. If the container is
 missing one, the wrapper returns `missing-required-commands` JSON instead of a
 bare shell failure and recommends `choose-container-with-required-commands`.
+Use `docker://python:3.12-slim` or another image with `python3` for planner
+live checks; the previous bare Ubuntu image is useful only for isolation
+preflight because it does not include Python by default.
 If pulling or resolving `docker://...` fails because of network or registry
 access, read `next_actions`; the wrapper can recommend
 `use-local-container-image` so the user can provide a local `.sif` image or a

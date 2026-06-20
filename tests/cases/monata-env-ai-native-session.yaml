@@ -16,6 +16,7 @@
     "skill_must_contain": [
       "AI-native setup",
       "scripts/plan_monata_env.py",
+      "--container-image",
       "scripts/execute_monata_env_runbook.py",
       "--write-manifest",
       "plan.decisions",
@@ -38,6 +39,7 @@
       "scripts/test_monata_env_upstream.py",
       "scripts/record_monata_env_session.py",
       "upstream-installed",
+      "docker://python:3.12-slim",
       "--require-command",
       "missing-required-commands",
       "choose-container-with-required-commands",

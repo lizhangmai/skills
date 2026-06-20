@@ -398,10 +398,41 @@ def test_plan_decisions_offer_network_source_and_isolated_testing_defaults(tmp_p
     isolation_options = {option["id"]: option for option in decisions["test_isolation"]["options"]}
     assert isolation_options["singularity"]["recommended"] is True
     assert "scripts/skill_container.py" in isolation_options["singularity"]["command"]
+    assert "--image docker://python:3.12-slim" in isolation_options["singularity"]["command"]
     assert "--require-command python3" in isolation_options["singularity"]["command"]
     assert "/mnt/skills/scripts/plan_monata_env.py" in isolation_options["singularity"]["command"]
     assert "/mnt/skills/plugins/monata-env" not in isolation_options["singularity"]["command"]
     assert decisions["upstream_test_profile"]["default"] == "skip"
+
+
+def test_plan_decisions_accept_local_container_image_for_isolated_testing(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    image = tmp_path / "monata-env-python.sif"
+    write_monata_workspace(workspace)
+    image.write_text("sif", encoding="utf-8")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--container-image",
+            image,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    command = {option["id"]: option for option in decisions["test_isolation"]["options"]}["singularity"]["command"]
+    assert f"--image {image.resolve()}" in command
+    assert "docker://python:3.12-slim" not in command
 
 
 def test_plan_decisions_recommend_local_sources_and_basic_upstream_profile(tmp_path):

@@ -12,7 +12,7 @@ from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SINGULARITY_BIN = "/opt/singularity-ce/4.1.1/bin/singularity"
-DEFAULT_IMAGE = "docker://ubuntu:24.04"
+DEFAULT_IMAGE = "docker://python:3.12-slim"
 PREFLIGHT_SCRIPT = (
     "for command_name in \"$@\"; do "
     "command -v \"$command_name\" >/dev/null 2>&1 || printf '%s\\n' \"$command_name\"; "

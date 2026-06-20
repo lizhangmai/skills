@@ -30,10 +30,20 @@ EXPOSED_COMMANDS = {
     "xschem": "xschem",
 }
 CACHED_SKILLS_ROOT = Path.home() / ".cache" / "monata-env" / "skills"
+DEFAULT_CONTAINER_IMAGE = "docker://python:3.12-slim"
 
 
 def command_string(command):
     return shlex.join(str(part) for part in command)
+
+
+def resolve_container_image(value=None):
+    if not value:
+        return DEFAULT_CONTAINER_IMAGE
+    text = str(value)
+    if "://" in text:
+        return text
+    return str(Path(text).expanduser().resolve())
 
 
 def conda_build_helper_candidates():
@@ -383,7 +393,7 @@ def runbook(commands, packages, build_packages, output_dir, manifest_path, upstr
     ]
 
 
-def decisions(root, output_dir, local_source_paths, profiles, build_needed):
+def decisions(root, output_dir, local_source_paths, profiles, build_needed, container_image):
     source_paths = {package: str(path) for package, path in local_source_paths.items()}
     has_local_sources = bool(source_paths)
     upstream_recommended = profiles["upstream_installed"]["recommended"]
@@ -398,6 +408,7 @@ def decisions(root, output_dir, local_source_paths, profiles, build_needed):
         "--state-dir /tmp/monata-env-skill-test "
         f"--workspace {shlex.quote(str(Path(root).resolve()))} "
         f"--channel {shlex.quote(str(output_dir))} "
+        f"--image {shlex.quote(container_image)} "
         "--require-command python3 "
         "--dry-run -- "
         "bash -lc 'cd /mnt/project && python3 "
@@ -540,10 +551,11 @@ def questions(local_sources):
     return items
 
 
-def create_plan(root, output_dir, local_source_values, env_name, conda_build_helper=None):
+def create_plan(root, output_dir, local_source_values, env_name, conda_build_helper=None, container_image=None):
     detected = detect(root)
     packages = detected["packages"]
     helper_script = resolve_conda_build_helper(conda_build_helper)
+    resolved_container_image = resolve_container_image(container_image)
     local_source_paths = parse_key_path(local_source_values)
     local_sources = {
         package: local_source_status(package, path)
@@ -587,7 +599,7 @@ def create_plan(root, output_dir, local_source_values, env_name, conda_build_hel
             "conda_build_script_exists": helper_script.exists(),
         },
         "questions": questions(local_sources),
-        "decisions": decisions(root, output_dir, local_source_paths, profiles, bool(build_packages)),
+        "decisions": decisions(root, output_dir, local_source_paths, profiles, bool(build_packages), resolved_container_image),
         "commands": commands,
         "runbook": runbook(
             commands,
@@ -614,6 +626,7 @@ def parse_args():
     parser.add_argument("--local-source", action="append", default=[], help="Trusted local checkout as package=path.")
     parser.add_argument("--env-name", default="monata-env", help="pixi global environment name.")
     parser.add_argument("--conda-build-helper", type=Path, help="Path to conda-build helper rattler_channel.py.")
+    parser.add_argument("--container-image", help="Singularity image URI or local .sif path for isolated live checks.")
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
     return parser.parse_args()
@@ -654,6 +667,7 @@ def main():
         args.local_source,
         args.env_name,
         args.conda_build_helper,
+        args.container_image,
     )
     if args.write_manifest:
         write_manifest_seed(plan)

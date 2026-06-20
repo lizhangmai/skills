@@ -518,16 +518,21 @@ def test_plan_decisions_can_emit_isolated_live_install_smoke_command(tmp_path):
     assert f"--state-dir {session_dir.resolve() / 'container-state'}" in live_install
     assert f"--image {image.resolve()}" in live_install
     assert f"--channel {output_dir.resolve()}" in live_install
-    assert f"--bind {host_pixi_root.resolve()}:/opt/host-pixi:ro" in live_install
+    assert f"--bind {host_pixi_root.resolve() / 'bin' / 'pixi'}:/opt/host-pixi/bin/pixi:ro" in live_install
+    assert f"--bind {host_pixi_root.resolve()}:/opt/host-pixi:ro" not in live_install
+    assert "--prepend-path /tmp/skill-home/.pixi/bin --prepend-path /opt/host-pixi/bin" in live_install
     assert "--prepend-path /opt/host-pixi/bin" in live_install
+    assert "--require-command /usr/local/bin/python3" in live_install
     assert "--require-command pixi" in live_install
     assert "bash -c" in live_install
     assert "bash -lc" not in live_install
     assert "plan_monata_env.py" in live_install
+    assert "/usr/local/bin/python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py" in live_install
     assert "--root /mnt/project --output-dir /tmp/skill-channel" in live_install
     assert "--session-dir /tmp/skill-home/monata-env-session" in live_install
     assert "--write-manifest --format json" in live_install
     assert "execute_monata_env_runbook.py" in live_install
+    assert "/usr/local/bin/python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/execute_monata_env_runbook.py" in live_install
     assert live_install.index("plan_monata_env.py") < live_install.index("execute_monata_env_runbook.py")
     assert "--step install --step smoke" in live_install
     assert "--allow-confirmation-required" in live_install

@@ -459,6 +459,7 @@ def container_planner_command(root, output_dir, container_image, helper_script, 
 def container_install_smoke_command(root, output_dir, container_image, helper_script, host_pixi_root, state_dir):
     if not host_pixi_root:
         return ""
+    container_python = "/usr/local/bin/python3"
     plan_script = "/mnt/skills/scripts/plan_monata_env.py"
     execute_script = "/mnt/skills/scripts/execute_monata_env_runbook.py"
     container_helper_arg = ""
@@ -473,7 +474,8 @@ def container_install_smoke_command(root, output_dir, container_image, helper_sc
             " --conda-build-helper "
             "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py"
         )
-    bind = f"{host_pixi_root}:/opt/host-pixi:ro"
+    pixi_binary = Path(host_pixi_root) / "bin" / "pixi"
+    bind = f"{pixi_binary}:/opt/host-pixi/bin/pixi:ro"
     return (
         container_runner_prefix(
             root,
@@ -483,20 +485,21 @@ def container_install_smoke_command(root, output_dir, container_image, helper_sc
             state_dir,
             extra_options=[
                 f"--bind {shlex.quote(bind)} ",
+                "--prepend-path /tmp/skill-home/.pixi/bin ",
                 "--prepend-path /opt/host-pixi/bin ",
             ],
         )
-        + "--require-command python3 "
+        + f"--require-command {container_python} "
         "--require-command pixi "
         "-- "
         "bash -c 'cd /mnt/project && "
         "mkdir -p /tmp/skill-home/monata-env-session && "
-        f"python3 {plan_script} "
+        f"{container_python} {plan_script} "
         "--root /mnt/project --output-dir /tmp/skill-channel "
         f"--session-dir /tmp/skill-home/monata-env-session{container_helper_arg} "
         "--write-manifest --format json "
         "> /tmp/skill-home/monata-env-session/plan.json && "
-        f"python3 {execute_script} "
+        f"{container_python} {execute_script} "
         "--manifest /tmp/skill-home/monata-env-session/monata-env-install-manifest.json "
         "--step install --step smoke --allow-confirmation-required --format json'"
     )

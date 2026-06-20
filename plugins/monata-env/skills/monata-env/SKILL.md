@@ -165,7 +165,9 @@ directory.
    binary without mutating the host pixi global state, pass the pixi install
    root explicitly. The planner will include a ready-to-run
    `plan.decisions[*].options[*].commands.install_smoke` command that binds
-   this pixi root read-only and keeps `PIXI_HOME` under `/tmp/skill-home`:
+   only `<host-pixi-root>/bin/pixi` read-only, puts the isolated
+   `/tmp/skill-home/.pixi/bin` first on `PATH`, and keeps `PIXI_HOME` under
+   `/tmp/skill-home`:
 
    ```bash
    python scripts/plan_monata_env.py \
@@ -539,9 +541,9 @@ Use live checks in tiers:
   until the selected image passes `--require-command pixi`. For a local smoke
   validation where a trusted host pixi binary is already available, pass
   `--host-pixi-root` to `plan_monata_env.py` and run the generated
-  `test_isolation` option's `commands.install_smoke`. That command binds the
-  host pixi install read-only and prepends its bin directory while keeping
-  `PIXI_HOME` in `/tmp/skill-home`:
+  `test_isolation` option's `commands.install_smoke`. That command binds only
+  the host pixi executable read-only, puts the isolated pixi global bin first
+  on `PATH`, and keeps `PIXI_HOME` in `/tmp/skill-home`:
 
   ```bash
   python scripts/skill_container.py \
@@ -550,12 +552,13 @@ Use live checks in tiers:
     --workspace "<project-workspace>" \
     --channel "$CONDA_BUILD_OUTPUT_DIR" \
     --image /path/to/monata-env-python-3.12-slim.sif \
-    --bind "<host-pixi-root>:/opt/host-pixi:ro" \
+    --bind "<host-pixi-root>/bin/pixi:/opt/host-pixi/bin/pixi:ro" \
+    --prepend-path /tmp/skill-home/.pixi/bin \
     --prepend-path /opt/host-pixi/bin \
-    --require-command python3 \
+    --require-command /usr/local/bin/python3 \
     --require-command pixi \
     -- \
-    bash -c 'cd /mnt/project && python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/execute_monata_env_runbook.py --manifest /tmp/skill-home/monata-env-session/monata-env-install-manifest.json --step install --step smoke --allow-confirmation-required --format json'
+    bash -c 'cd /mnt/project && mkdir -p /tmp/skill-home/monata-env-session && /usr/local/bin/python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py --root /mnt/project --output-dir /tmp/skill-channel --session-dir /tmp/skill-home/monata-env-session --conda-build-helper /mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py --write-manifest --format json > /tmp/skill-home/monata-env-session/plan.json && /usr/local/bin/python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/execute_monata_env_runbook.py --manifest /tmp/skill-home/monata-env-session/monata-env-install-manifest.json --step install --step smoke --allow-confirmation-required --format json'
   ```
 
   Use `bash -c`, not `bash -lc`, when relying on a prepended PATH; login shells

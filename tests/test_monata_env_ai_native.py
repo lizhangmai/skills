@@ -477,6 +477,64 @@ def test_plan_decisions_accept_local_container_image_for_isolated_testing(tmp_pa
     assert "docker://python:3.12-slim" not in command
 
 
+def test_plan_decisions_can_emit_isolated_live_install_smoke_command(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    image = tmp_path / "monata-env-python.sif"
+    host_pixi_root = tmp_path / "host-pixi"
+    write_monata_workspace(workspace)
+    write_channel_artifacts(output_dir, ["ngspice", "openvaf-r", "klayout", "xschem"])
+    image.write_text("sif", encoding="utf-8")
+    (host_pixi_root / "bin").mkdir(parents=True)
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            "--container-image",
+            image,
+            "--host-pixi-root",
+            host_pixi_root,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    singularity = {option["id"]: option for option in decisions["test_isolation"]["options"]}["singularity"]
+    commands = singularity["commands"]
+    assert commands["planner"] == singularity["command"]
+    live_install = commands["install_smoke"]
+    assert "scripts/skill_container.py" in live_install
+    assert f"--image {image.resolve()}" in live_install
+    assert f"--channel {output_dir.resolve()}" in live_install
+    assert f"--bind {host_pixi_root.resolve()}:/opt/host-pixi:ro" in live_install
+    assert "--prepend-path /opt/host-pixi/bin" in live_install
+    assert "--require-command pixi" in live_install
+    assert "bash -c" in live_install
+    assert "bash -lc" not in live_install
+    assert "plan_monata_env.py" in live_install
+    assert "--root /mnt/project --output-dir /tmp/skill-channel" in live_install
+    assert "--session-dir /tmp/skill-home/monata-env-session" in live_install
+    assert "--write-manifest --format json" in live_install
+    assert "execute_monata_env_runbook.py" in live_install
+    assert live_install.index("plan_monata_env.py") < live_install.index("execute_monata_env_runbook.py")
+    assert "--step install --step smoke" in live_install
+    assert "--allow-confirmation-required" in live_install
+    assert "/tmp/skill-home/monata-env-session/monata-env-install-manifest.json" in live_install
+    assert data["container"]["host_pixi_root"] == str(host_pixi_root.resolve())
+    assert data["container"]["live_install_smoke_command"] == live_install
+
+
 def test_plan_decisions_recommend_local_sources_and_basic_upstream_profile(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"

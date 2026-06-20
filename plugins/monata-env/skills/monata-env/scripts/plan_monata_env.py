@@ -417,7 +417,99 @@ def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_
     ]
 
 
-def decisions(root, output_dir, local_source_paths, profiles, build_needed, container_image, helper_script):
+def container_runner_prefix(root, output_dir, container_image, helper_script, extra_options=None):
+    skills_repo_root = find_skills_repo_root(helper_script)
+    repo_root_option = ""
+    if skills_repo_root:
+        repo_root_option = f"--repo-root {shlex.quote(str(skills_repo_root))} "
+    options = "".join(extra_options or [])
+    return (
+        "python scripts/skill_container.py "
+        "--state-dir /tmp/monata-env-skill-test "
+        f"{repo_root_option}"
+        f"--workspace {shlex.quote(str(Path(root).resolve()))} "
+        f"--channel {shlex.quote(str(output_dir))} "
+        f"--image {shlex.quote(container_image)} "
+        f"{options}"
+    )
+
+
+def container_planner_command(root, output_dir, container_image, helper_script):
+    skills_repo_root = find_skills_repo_root(helper_script)
+    container_plan_script = "/mnt/skills/scripts/plan_monata_env.py"
+    container_helper_arg = ""
+    if skills_repo_root:
+        container_plan_script = "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py"
+        container_helper_arg = (
+            " --conda-build-helper "
+            "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py"
+        )
+    return (
+        container_runner_prefix(root, output_dir, container_image, helper_script)
+        + "--require-command python3 "
+        "--dry-run -- "
+        f"bash -lc 'cd /mnt/project && python3 {container_plan_script} "
+        f"--root /mnt/project --output-dir /tmp/skill-channel "
+        f"--session-dir /tmp/skill-home/monata-env-session{container_helper_arg} "
+        "--write-manifest --format json'"
+    )
+
+
+def container_install_smoke_command(root, output_dir, container_image, helper_script, host_pixi_root):
+    if not host_pixi_root:
+        return ""
+    plan_script = "/mnt/skills/scripts/plan_monata_env.py"
+    execute_script = "/mnt/skills/scripts/execute_monata_env_runbook.py"
+    container_helper_arg = ""
+    skills_repo_root = find_skills_repo_root(helper_script)
+    if skills_repo_root:
+        plan_script = "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py"
+        execute_script = (
+            "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/"
+            "execute_monata_env_runbook.py"
+        )
+        container_helper_arg = (
+            " --conda-build-helper "
+            "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py"
+        )
+    bind = f"{host_pixi_root}:/opt/host-pixi:ro"
+    return (
+        container_runner_prefix(
+            root,
+            output_dir,
+            container_image,
+            helper_script,
+            extra_options=[
+                f"--bind {shlex.quote(bind)} ",
+                "--prepend-path /opt/host-pixi/bin ",
+            ],
+        )
+        + "--require-command python3 "
+        "--require-command pixi "
+        "-- "
+        "bash -c 'cd /mnt/project && "
+        "mkdir -p /tmp/skill-home/monata-env-session && "
+        f"python3 {plan_script} "
+        "--root /mnt/project --output-dir /tmp/skill-channel "
+        f"--session-dir /tmp/skill-home/monata-env-session{container_helper_arg} "
+        "--write-manifest --format json "
+        "> /tmp/skill-home/monata-env-session/plan.json && "
+        f"python3 {execute_script} "
+        "--manifest /tmp/skill-home/monata-env-session/monata-env-install-manifest.json "
+        "--step install --step smoke --allow-confirmation-required --format json'"
+    )
+
+
+def decisions(
+    root,
+    output_dir,
+    local_source_paths,
+    profiles,
+    build_needed,
+    container_image,
+    helper_script,
+    host_pixi_root=None,
+):
     source_paths = {package: str(path) for package, path in local_source_paths.items()}
     has_local_sources = bool(source_paths)
     upstream_recommended = profiles["upstream_installed"]["recommended"]
@@ -427,31 +519,17 @@ def decisions(root, output_dir, local_source_paths, profiles, build_needed, cont
         source_default = "local_sources"
     else:
         source_default = "network"
-    skills_repo_root = find_skills_repo_root(helper_script)
-    repo_root_option = ""
-    container_plan_script = "/mnt/skills/scripts/plan_monata_env.py"
-    container_helper_arg = ""
-    if skills_repo_root:
-        repo_root_option = f"--repo-root {shlex.quote(str(skills_repo_root))} "
-        container_plan_script = "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py"
-        container_helper_arg = (
-            " --conda-build-helper "
-            "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py"
-        )
-    isolation_command = (
-        "python scripts/skill_container.py "
-        "--state-dir /tmp/monata-env-skill-test "
-        f"{repo_root_option}"
-        f"--workspace {shlex.quote(str(Path(root).resolve()))} "
-        f"--channel {shlex.quote(str(output_dir))} "
-        f"--image {shlex.quote(container_image)} "
-        "--require-command python3 "
-        "--dry-run -- "
-        f"bash -lc 'cd /mnt/project && python3 {container_plan_script} "
-        f"--root /mnt/project --output-dir /tmp/skill-channel "
-        f"--session-dir /tmp/skill-home/monata-env-session{container_helper_arg} "
-        "--write-manifest --format json'"
+    isolation_command = container_planner_command(root, output_dir, container_image, helper_script)
+    isolated_commands = {"planner": isolation_command}
+    live_install_command = container_install_smoke_command(
+        root,
+        output_dir,
+        container_image,
+        helper_script,
+        host_pixi_root,
     )
+    if live_install_command:
+        isolated_commands["install_smoke"] = live_install_command
     return [
         {
             "id": "global_environment",
@@ -508,6 +586,7 @@ def decisions(root, output_dir, local_source_paths, profiles, build_needed, cont
                     "label": "Isolated Singularity state",
                     "recommended": True,
                     "command": isolation_command,
+                    "commands": isolated_commands,
                     "effect": "Uses temporary HOME, PIXI_HOME, caches, and channel directories.",
                 },
                 {
@@ -596,12 +675,14 @@ def create_plan(
     conda_build_helper=None,
     container_image=None,
     session_dir=None,
+    host_pixi_root=None,
 ):
     detected = detect(root)
     packages = detected["packages"]
     helper_script = resolve_conda_build_helper(conda_build_helper)
     resolved_container_image = resolve_container_image(container_image)
     resolved_session_dir = Path(session_dir).expanduser().resolve() if session_dir else output_dir
+    resolved_host_pixi_root = Path(host_pixi_root).expanduser().resolve() if host_pixi_root else None
     local_source_paths = parse_key_path(local_source_values)
     local_sources = {
         package: local_source_status(package, path)
@@ -646,6 +727,17 @@ def create_plan(
             "dir": str(resolved_session_dir) if resolved_session_dir else "",
             "purpose": "Stores the monata-env setup manifest and runbook logs.",
         },
+        "container": {
+            "image": resolved_container_image,
+            "host_pixi_root": str(resolved_host_pixi_root) if resolved_host_pixi_root else "",
+            "live_install_smoke_command": container_install_smoke_command(
+                root,
+                output_dir,
+                resolved_container_image,
+                helper_script,
+                resolved_host_pixi_root,
+            ),
+        },
         "local_sources": local_sources,
         "tools": tools,
         "helper": {
@@ -661,6 +753,7 @@ def create_plan(
             bool(build_packages),
             resolved_container_image,
             helper_script,
+            resolved_host_pixi_root,
         ),
         "commands": commands,
         "runbook": runbook(
@@ -691,6 +784,11 @@ def parse_args():
     parser.add_argument("--conda-build-helper", type=Path, help="Path to conda-build helper rattler_channel.py.")
     parser.add_argument("--container-image", help="Singularity image URI or local .sif path for isolated live checks.")
     parser.add_argument("--session-dir", type=Path, help="Directory for the manifest and runbook logs.")
+    parser.add_argument(
+        "--host-pixi-root",
+        type=Path,
+        help="Host pixi installation root to bind read-only for isolated live install/smoke checks.",
+    )
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
     return parser.parse_args()
@@ -733,6 +831,7 @@ def main():
         args.conda_build_helper,
         args.container_image,
         args.session_dir,
+        args.host_pixi_root,
     )
     if args.write_manifest:
         write_manifest_seed(plan)

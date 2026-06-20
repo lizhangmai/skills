@@ -146,6 +146,28 @@ directory.
      --format json
    ```
 
+   For an isolated live install/smoke check that reuses a trusted host pixi
+   binary without mutating the host pixi global state, pass the pixi install
+   root explicitly. The planner will include a ready-to-run
+   `plan.decisions[*].options[*].commands.install_smoke` command that binds
+   this pixi root read-only and keeps `PIXI_HOME` under `/tmp/skill-home`:
+
+   ```bash
+   python scripts/plan_monata_env.py \
+     --root "<project-workspace>" \
+     --output-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --session-dir /tmp/monata-env-session \
+     --container-image /path/to/monata-env-python-3.12-slim.sif \
+     --host-pixi-root /path/to/host-pixi-root \
+     --write-manifest \
+     --format json
+   ```
+
+   That generated command first runs the planner inside the container with
+   `--write-manifest`, stores the planner JSON under
+   `/tmp/skill-home/monata-env-session`, and then executes only the
+   `install` and `smoke` runbook steps against that isolated manifest.
+
    Review `plan.decisions` with the user when there is meaningful choice:
    source policy, pixi global writes, test isolation, and upstream test
    profile. Treat `plan.runbook` as the authoritative execution sequence. Each
@@ -500,8 +522,10 @@ Use live checks in tiers:
 - Install/smoke tier: requires a container image with `pixi` and enough runtime
   libraries for the tools. Keep this tier separate from planner/channel checks
   until the selected image passes `--require-command pixi`. For a local smoke
-  validation where a trusted host pixi binary is already available, bind the
-  host pixi install read-only and prepend its bin directory while keeping
+  validation where a trusted host pixi binary is already available, pass
+  `--host-pixi-root` to `plan_monata_env.py` and run the generated
+  `test_isolation` option's `commands.install_smoke`. That command binds the
+  host pixi install read-only and prepends its bin directory while keeping
   `PIXI_HOME` in `/tmp/skill-home`:
 
   ```bash

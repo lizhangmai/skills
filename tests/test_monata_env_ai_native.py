@@ -175,6 +175,32 @@ def test_plan_recommends_upstream_installed_tests_when_sources_are_provided(tmp_
     assert f"--xschem-source {xschem_source.resolve()}" in command
 
 
+def test_plan_uses_available_conda_build_helper_path(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    write_monata_workspace(workspace)
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["helper"]["conda_build_script"] == str(RATTLER_SCRIPT)
+    assert data["helper"]["conda_build_script_exists"] is True
+    assert data["commands"]["check_channel"][1] == str(RATTLER_SCRIPT)
+    assert data["commands"]["build"][1] == str(RATTLER_SCRIPT)
+
+
 def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"

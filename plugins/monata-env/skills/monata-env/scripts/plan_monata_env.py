@@ -29,10 +29,40 @@ EXPOSED_COMMANDS = {
     "klayout": "klayout",
     "xschem": "xschem",
 }
+CACHED_SKILLS_ROOT = Path.home() / ".cache" / "monata-env" / "skills"
 
 
 def command_string(command):
     return shlex.join(str(part) for part in command)
+
+
+def conda_build_helper_candidates():
+    candidates = []
+    try:
+        plugins_dir = SCRIPT_DIR.parents[3]
+        candidates.append(plugins_dir / "conda-build" / "skills" / "conda-build" / "scripts" / "rattler_channel.py")
+    except IndexError:
+        pass
+    candidates.append(
+        CACHED_SKILLS_ROOT
+        / "plugins"
+        / "conda-build"
+        / "skills"
+        / "conda-build"
+        / "scripts"
+        / "rattler_channel.py"
+    )
+    return candidates
+
+
+def resolve_conda_build_helper(value=None):
+    if value:
+        return Path(value).expanduser().resolve()
+    candidates = conda_build_helper_candidates()
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0].resolve()
 
 
 def run_git(path, *args):
@@ -130,10 +160,10 @@ def channel_status(output_dir, packages):
     }
 
 
-def build_command(packages, output_dir, local_sources):
+def build_command(packages, output_dir, local_sources, helper_script):
     command = [
         sys.executable,
-        "scripts/rattler_channel.py",
+        str(helper_script),
         "build",
         "--recipe-set",
         "circuit-toolchain",
@@ -169,10 +199,10 @@ def select_build_packages(packages, missing, local_sources):
     return [package for package in packages if package in selected]
 
 
-def check_channel_command(packages, output_dir):
+def check_channel_command(packages, output_dir, helper_script):
     command = [
         sys.executable,
-        "scripts/rattler_channel.py",
+        str(helper_script),
         "check-channel",
         "--recipe-set",
         "circuit-toolchain",
@@ -465,9 +495,10 @@ def questions(local_sources):
     return items
 
 
-def create_plan(root, output_dir, local_source_values, env_name):
+def create_plan(root, output_dir, local_source_values, env_name, conda_build_helper=None):
     detected = detect(root)
     packages = detected["packages"]
+    helper_script = resolve_conda_build_helper(conda_build_helper)
     local_source_paths = parse_key_path(local_source_values)
     local_sources = {
         package: local_source_status(package, path)
@@ -490,8 +521,8 @@ def create_plan(root, output_dir, local_source_values, env_name):
     }
     manifest_path = output_dir / "monata-env-install-manifest.json" if output_dir else Path("monata-env-install-manifest.json")
     commands = {
-        "check_channel": check_channel_command(packages, output_dir),
-        "build": build_command(build_packages, output_dir, selected_local_sources) if build_packages else [],
+        "check_channel": check_channel_command(packages, output_dir, helper_script),
+        "build": build_command(build_packages, output_dir, selected_local_sources, helper_script) if build_packages else [],
         "install": install_command(packages, output_dir, env_name),
         "smoke": [sys.executable, str(SCRIPT_DIR / "smoke_monata_env_tools.py"), "--format", "json"],
         "upstream_installed_tests": upstream_installed_test_command(local_source_paths),
@@ -506,6 +537,10 @@ def create_plan(root, output_dir, local_source_values, env_name):
         "channel": channel,
         "local_sources": local_sources,
         "tools": tools,
+        "helper": {
+            "conda_build_script": str(helper_script),
+            "conda_build_script_exists": helper_script.exists(),
+        },
         "questions": questions(local_sources),
         "decisions": decisions(root, output_dir, local_source_paths, profiles, bool(build_packages)),
         "commands": commands,
@@ -532,6 +567,7 @@ def parse_args():
     parser.add_argument("--output-dir", type=Path, required=True, help="Final local conda channel directory.")
     parser.add_argument("--local-source", action="append", default=[], help="Trusted local checkout as package=path.")
     parser.add_argument("--env-name", default="monata-env", help="pixi global environment name.")
+    parser.add_argument("--conda-build-helper", type=Path, help="Path to conda-build helper rattler_channel.py.")
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
     return parser.parse_args()
@@ -566,7 +602,13 @@ def write_manifest_seed(plan):
 
 def main():
     args = parse_args()
-    plan = create_plan(args.root, args.output_dir.resolve(), args.local_source, args.env_name)
+    plan = create_plan(
+        args.root,
+        args.output_dir.resolve(),
+        args.local_source,
+        args.env_name,
+        args.conda_build_helper,
+    )
     if args.write_manifest:
         write_manifest_seed(plan)
     if args.format == "summary":

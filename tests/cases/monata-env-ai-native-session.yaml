@@ -20,6 +20,7 @@
       "--write-manifest",
       "plan.decisions",
       "plan.runbook",
+      "plan.helper.conda_build_script",
       "depends_on",
       "record_after",
       "source policy",

@@ -130,6 +130,9 @@ directory.
    payloads. Review the plan's `questions`. Ask the user before doing a
    recommended fallback such as creating temporary detached worktrees,
    installing missing host tools, or writing to the pixi global environment.
+   Check `plan.helper.conda_build_script`: when it exists, the generated
+   check/build commands already point at that helper path; when it is missing,
+   resolve the helper checkout before executing check/build steps.
 
    Prefer the executor for runbook steps instead of manually retyping commands:
 
@@ -179,6 +182,17 @@ directory.
    ```
 
    If the checkout already exists, run `git -C ... pull --ff-only`.
+
+   You can also pass an explicit helper path to the planner:
+
+   ```bash
+   python scripts/plan_monata_env.py \
+     --root "<project-workspace>" \
+     --output-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --conda-build-helper "$HOME/.cache/monata-env/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py" \
+     --write-manifest \
+     --format json
+   ```
 
 7. Check the user-provided channel. If all detected packages are present, skip
    the build step:

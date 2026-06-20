@@ -25,6 +25,7 @@
       "xschem=3.4.7",
       "execute_monata_env_runbook.py",
       "plan_monata_env.py",
+      "conda_build_script",
       "runbook",
       "depends_on",
       "record_after",

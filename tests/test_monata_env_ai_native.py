@@ -587,6 +587,138 @@ def test_execute_runbook_skips_downstream_when_dependency_is_skipped(tmp_path):
     assert not smoke_marker.exists()
 
 
+def test_execute_runbook_suggests_local_sources_after_network_failure(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "build",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import sys; print('failed to download source: network timeout', file=sys.stderr); sys.exit(1)",
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    assert summary["ok"] is False
+    action = summary["steps"][0]["next_actions"][0]
+    assert action["id"] == "provide-local-source"
+    assert action["requires_user_input"] is True
+    assert "local KLayout/Xschem source checkout" in action["prompt"]
+    assert summary["next_actions"][0]["id"] == "provide-local-source"
+
+
+def test_execute_runbook_suggests_helper_resolution_when_helper_script_is_missing(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    missing_helper = tmp_path / "missing-rattler-channel.py"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "check_channel",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [sys.executable, str(missing_helper), "check-channel"],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    action = summary["steps"][0]["next_actions"][0]
+    assert action["id"] == "resolve-conda-build-helper"
+    assert action["requires_user_input"] is False
+    assert "plan_monata_env.py --conda-build-helper" in action["command"]
+    assert summary["next_actions"][0]["id"] == "resolve-conda-build-helper"
+
+
+def test_execute_runbook_suggests_worktree_for_source_ref_mismatch(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "build",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import sys; print('local source does not match required ref v0.30.9', file=sys.stderr); sys.exit(1)",
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    action = summary["steps"][0]["next_actions"][0]
+    assert action["id"] == "create-versioned-source-worktree"
+    assert action["requires_user_input"] is True
+    assert "detached worktree" in action["prompt"]
+
+
+def test_execute_runbook_suggests_tool_inspection_for_smoke_failure(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "smoke",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import sys; print('{\"ok\": false, \"tools\": {\"xschem\": {\"reason\": \"missing\"}}}'); sys.exit(1)",
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    action = summary["steps"][0]["next_actions"][0]
+    assert action["id"] == "inspect-installed-tools"
+    assert action["requires_user_input"] is False
+    assert "smoke_monata_env_tools.py" in action["command"]
+
+
 def test_record_manifest_appends_command_and_verification_payload(tmp_path):
     manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
     smoke_output = tmp_path / "smoke.json"

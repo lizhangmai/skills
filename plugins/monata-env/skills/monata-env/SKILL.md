@@ -156,6 +156,13 @@ directory.
      --format json
    ```
 
+   If the executor returns `next_actions`, do not blindly retry. Use those
+   structured suggestions to negotiate the next step with the user, such as
+   providing local KLayout/Xschem source checkouts after network failure,
+   refreshing the conda-build helper, creating a detached source worktree at
+   the required tag, or inspecting missing exposed tool commands after smoke
+   failure.
+
 5. Detect the required circuit-tool packages from the Monata workspace when you
    need a shell list outside the planner:
 

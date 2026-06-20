@@ -14,6 +14,9 @@ UPSTREAM_SCRIPT = (
 EXECUTE_SCRIPT = (
     REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "execute_monata_env_runbook.py"
 )
+PREPARE_IMAGE_SCRIPT = (
+    REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "prepare_monata_env_test_image.py"
+)
 RECORD_SCRIPT = (
     REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "record_monata_env_session.py"
 )
@@ -504,6 +507,158 @@ def test_plan_decisions_accept_local_container_image_for_isolated_testing(tmp_pa
     command = {option["id"]: option for option in decisions["test_isolation"]["options"]}["singularity"]["command"]
     assert f"--image {image.resolve()}" in command
     assert "docker://python:3.12-slim" not in command
+
+
+def test_plan_decisions_offer_dedicated_test_image_preparation(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    host_pixi_root = tmp_path / "host-pixi"
+    test_image = session_dir / "monata-env-test.sif"
+    write_monata_workspace(workspace)
+    (host_pixi_root / "bin").mkdir(parents=True)
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            "--host-pixi-root",
+            host_pixi_root,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["container"]["test_image"]["image"] == str(test_image.resolve())
+    assert data["container"]["test_image"]["required_commands"] == ["/usr/local/bin/python3", "git", "pixi"]
+    assert "prepare_monata_env_test_image.py" in data["container"]["test_image"]["prepare_command"]
+    assert f"--image {test_image.resolve()}" in data["container"]["test_image"]["prepare_command"]
+    assert f"--pixi-binary {host_pixi_root.resolve() / 'bin' / 'pixi'}" in data["container"]["test_image"]["prepare_command"]
+    assert "--remote" in data["container"]["test_image"]["remote_prepare_command"]
+    assert f"--image {test_image.resolve()}" in data["container"]["test_image"]["remote_prepare_command"]
+    assert "--pixi-binary" not in data["container"]["test_image"]["remote_prepare_command"]
+    assert "scripts/skill_container.py" in data["container"]["test_image"]["validate_command"]
+    assert f"--image {test_image.resolve()}" in data["container"]["test_image"]["validate_command"]
+    assert "--require-command /usr/local/bin/python3" in data["container"]["test_image"]["validate_command"]
+    assert "--require-command git" in data["container"]["test_image"]["validate_command"]
+    assert "--require-command pixi" in data["container"]["test_image"]["validate_command"]
+
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    image_options = {option["id"]: option for option in decisions["test_image"]["options"]}
+    assert decisions["test_image"]["default"] == "prepare_dedicated"
+    assert image_options["prepare_dedicated"]["recommended"] is True
+    assert image_options["prepare_dedicated"]["command"] == data["container"]["test_image"]["prepare_command"]
+    assert image_options["prepare_dedicated"]["remote_command"] == data["container"]["test_image"]["remote_prepare_command"]
+    assert image_options["prepare_dedicated"]["validation_command"] == data["container"]["test_image"]["validate_command"]
+    assert image_options["host_pixi_bind"]["recommended"] is True
+
+
+def test_prepare_test_image_dry_run_writes_definition_with_local_pixi(tmp_path):
+    image = tmp_path / "monata-env-test.sif"
+    definition = tmp_path / "monata-env-test.def"
+    pixi = tmp_path / "pixi"
+    pixi.write_text("#!/bin/sh\n", encoding="utf-8")
+    pixi.chmod(0o755)
+
+    result = run(
+        [
+            sys.executable,
+            PREPARE_IMAGE_SCRIPT,
+            "--image",
+            image,
+            "--definition",
+            definition,
+            "--pixi-binary",
+            pixi,
+            "--dry-run",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["image"] == str(image.resolve())
+    assert data["definition"] == str(definition.resolve())
+    assert data["dry_run"] is True
+    assert data["required_commands"] == ["python3", "git", "pixi"]
+    assert data["build_command"][:3] == ["/opt/singularity-ce/4.1.1/bin/singularity", "build", "--fakeroot"]
+    assert data["preflight_command"][-4:] == [str(image.resolve()), "sh", "-c", "command -v python3 && command -v git && command -v pixi"]
+    text = definition.read_text(encoding="utf-8")
+    assert "Bootstrap: docker" in text
+    assert "From: python:3.12-slim" in text
+    assert "apt-get install -y --no-install-recommends" in text
+    assert " git " in text
+    assert "%files" in text
+    assert f"{pixi.resolve()} /usr/local/bin/pixi" in text
+    assert "command -v python3" in text
+    assert "command -v git" in text
+    assert "command -v pixi" in text
+
+
+def test_prepare_test_image_reports_fakeroot_mapping_next_actions(tmp_path):
+    image = tmp_path / "monata-env-test.sif"
+    definition = tmp_path / "monata-env-test.def"
+    fake_singularity = tmp_path / "singularity"
+    fake_singularity.write_text(
+        "#!/usr/bin/env sh\n"
+        "printf '%s\\n' 'FATAL:   could not use fakeroot: no mapping entry found in /etc/subuid for lizhangmai' >&2\n"
+        "exit 255\n",
+        encoding="utf-8",
+    )
+    fake_singularity.chmod(0o755)
+
+    result = run(
+        [
+            sys.executable,
+            PREPARE_IMAGE_SCRIPT,
+            "--image",
+            image,
+            "--definition",
+            definition,
+            "--singularity-bin",
+            fake_singularity,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 255, result.stdout
+    data = json.loads(result.stdout)
+    assert data["build"]["returncode"] == 255
+    assert data["next_actions"][0]["id"] == "enable-fakeroot-or-use-remote-build"
+    assert data["next_actions"][0]["requires_user_input"] is True
+    assert data["next_actions"][1]["id"] == "use-host-pixi-bind-fallback"
+
+
+def test_prepare_test_image_remote_build_omits_fakeroot(tmp_path):
+    image = tmp_path / "monata-env-test.sif"
+
+    result = run(
+        [
+            sys.executable,
+            PREPARE_IMAGE_SCRIPT,
+            "--image",
+            image,
+            "--remote",
+            "--dry-run",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["build_command"][:3] == ["/opt/singularity-ce/4.1.1/bin/singularity", "build", "--remote"]
+    assert "--fakeroot" not in data["build_command"]
 
 
 def test_plan_decisions_can_emit_isolated_live_install_smoke_command(tmp_path):

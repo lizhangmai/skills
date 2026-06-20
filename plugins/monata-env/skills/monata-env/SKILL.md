@@ -137,6 +137,31 @@ directory.
      --format json
    ```
 
+   For repeatable live install/upstream checks that should not depend on host
+   tool shims, let the planner generate a dedicated test-image preparation
+   command. The image must contain `python3`, `git`, and `pixi`; if a trusted
+   local pixi binary is available, pass `--host-pixi-root` so the generated
+   image definition can copy only `<host-pixi-root>/bin/pixi` into the image:
+
+   ```bash
+   python scripts/plan_monata_env.py \
+     --root "<project-workspace>" \
+     --output-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --session-dir /tmp/monata-env-session \
+     --test-image-output /tmp/monata-env-session/monata-env-test.sif \
+     --host-pixi-root /path/to/host-pixi-root \
+     --write-manifest \
+     --format json
+   ```
+
+   Run `plan.container.test_image.prepare_command` to write/build the image,
+   then run `plan.container.test_image.validate_command` before using it as
+   `--container-image`. If local Singularity build fails with a fakeroot or
+   `/etc/subuid` mapping error, either ask an administrator to enable fakeroot,
+   run `plan.container.test_image.remote_prepare_command` when a remote builder
+   is configured, ask the user for a prebuilt `.sif`, or continue with the
+   `host_pixi_bind` fallback.
+
    For live validation that should inspect the final package channel without
    overwriting the final install manifest, keep `--output-dir` pointed at the
    package channel and send transient logs/manifests to `--session-dir`:
@@ -537,6 +562,15 @@ SINGULARITY_TMPDIR=<state-dir>/singularity-tmp
 ```
 
 Use live checks in tiers:
+
+- Test-image tier: review `plan.decisions` item `test_image` before expensive
+  live checks. Prefer `prepare_dedicated` when Singularity can build a local SIF;
+  it uses `scripts/prepare_monata_env_test_image.py` to create an image with
+  python3, git, and pixi, then validates those commands with the container
+  wrapper. Use `host_pixi_bind` only as a fallback when image build is not
+  available; use `provided_image` when the user gives a prebuilt `.sif`. When
+  the local machine lacks fakeroot subuid/subgid mappings, use the helper's
+  `--remote` option only if a Singularity remote builder is already configured.
 
 - Planner tier: requires `python3`; runs `plan_monata_env.py` in the container
   and writes the manifest seed.

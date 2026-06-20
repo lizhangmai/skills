@@ -32,6 +32,7 @@ EXPOSED_COMMANDS = {
 CACHED_SKILLS_ROOT = Path.home() / ".cache" / "monata-env" / "skills"
 DEFAULT_CONTAINER_IMAGE = "docker://python:3.12-slim"
 DEFAULT_CONTAINER_STATE_DIR = Path("/tmp/monata-env-skill-test")
+TEST_IMAGE_REQUIRED_COMMANDS = ["/usr/local/bin/python3", "git", "pixi"]
 
 
 def command_string(command):
@@ -45,6 +46,12 @@ def resolve_container_image(value=None):
     if "://" in text:
         return text
     return str(Path(text).expanduser().resolve())
+
+
+def default_test_image_output(session_dir, container_state_dir):
+    if session_dir:
+        return Path(session_dir) / "monata-env-test.sif"
+    return Path(container_state_dir) / "monata-env-test.sif"
 
 
 def find_skills_repo_root(helper_script):
@@ -459,6 +466,39 @@ def container_planner_command(root, output_dir, container_image, helper_script, 
     )
 
 
+def test_image_prepare_command(image_path, host_pixi_root=None, remote=False):
+    command = [
+        sys.executable,
+        str(SCRIPT_DIR / "prepare_monata_env_test_image.py"),
+        "--image",
+        str(image_path),
+        "--format",
+        "json",
+    ]
+    if remote:
+        command.append("--remote")
+    if host_pixi_root:
+        command.extend(["--pixi-binary", str(Path(host_pixi_root) / "bin" / "pixi")])
+    return command_string(command)
+
+
+def test_image_validate_command(root, output_dir, image_path, helper_script, state_dir):
+    command = container_runner_prefix(root, output_dir, str(image_path), helper_script, state_dir)
+    for required in TEST_IMAGE_REQUIRED_COMMANDS:
+        command += f"--require-command {shlex.quote(required)} "
+    return command + "-- true"
+
+
+def test_image_plan(root, output_dir, image_path, helper_script, state_dir, host_pixi_root=None):
+    return {
+        "image": str(image_path),
+        "required_commands": TEST_IMAGE_REQUIRED_COMMANDS,
+        "prepare_command": test_image_prepare_command(image_path, host_pixi_root),
+        "remote_prepare_command": test_image_prepare_command(image_path, remote=True),
+        "validate_command": test_image_validate_command(root, output_dir, image_path, helper_script, state_dir),
+    }
+
+
 def container_install_smoke_command(
     root,
     output_dir,
@@ -538,6 +578,7 @@ def decisions(
     container_image,
     helper_script,
     container_state_dir,
+    test_image,
     host_pixi_root=None,
 ):
     source_paths = {package: str(path) for package, path in local_source_paths.items()}
@@ -641,6 +682,37 @@ def decisions(
             ],
         },
         {
+            "id": "test_image",
+            "prompt": "Which container image should live install and upstream tests use?",
+            "default": "prepare_dedicated",
+            "options": [
+                {
+                    "id": "prepare_dedicated",
+                    "label": "Prepare dedicated image",
+                    "recommended": True,
+                    "command": test_image["prepare_command"],
+                    "remote_command": test_image["remote_prepare_command"],
+                    "validation_command": test_image["validate_command"],
+                    "required_commands": test_image["required_commands"],
+                    "effect": "Builds or updates a local SIF with python3, git, and pixi so live tests do not depend on host tool shims.",
+                },
+                {
+                    "id": "host_pixi_bind",
+                    "label": "Bind host pixi only",
+                    "recommended": bool(host_pixi_root),
+                    "effect": "Uses the current container image and binds only the host pixi executable read-only; useful when image build is unavailable.",
+                },
+                {
+                    "id": "provided_image",
+                    "label": "Use provided image",
+                    "recommended": False,
+                    "validation_command": test_image["validate_command"],
+                    "required_commands": test_image["required_commands"],
+                    "effect": "Use after the user provides a local .sif or reachable image that already contains required commands.",
+                },
+            ],
+        },
+        {
             "id": "upstream_test_profile",
             "prompt": "How much upstream project test coverage should run after installing tools?",
             "default": "basic" if upstream_recommended else "skip",
@@ -722,6 +794,7 @@ def create_plan(
     container_image=None,
     session_dir=None,
     container_state_dir=None,
+    test_image_output=None,
     host_pixi_root=None,
 ):
     detected = detect(root)
@@ -735,6 +808,11 @@ def create_plan(
         resolved_container_state_dir = resolved_session_dir / "container-state"
     else:
         resolved_container_state_dir = DEFAULT_CONTAINER_STATE_DIR
+    resolved_test_image_output = (
+        Path(test_image_output).expanduser().resolve()
+        if test_image_output
+        else default_test_image_output(resolved_session_dir if session_dir else None, resolved_container_state_dir).resolve()
+    )
     resolved_host_pixi_root = Path(host_pixi_root).expanduser().resolve() if host_pixi_root else None
     local_source_paths = parse_key_path(local_source_values)
     local_sources = {
@@ -769,6 +847,14 @@ def create_plan(
         "upstream_installed_tests": upstream_installed_test_command(local_source_paths),
     }
     profiles = test_profiles(local_source_paths)
+    test_image = test_image_plan(
+        root,
+        output_dir,
+        resolved_test_image_output,
+        helper_script,
+        resolved_container_state_dir,
+        resolved_host_pixi_root,
+    )
     return {
         "mode": "ai-native-session",
         "root": str(Path(root).resolve()),
@@ -784,6 +870,7 @@ def create_plan(
             "image": resolved_container_image,
             "state_dir": str(resolved_container_state_dir),
             "host_pixi_root": str(resolved_host_pixi_root) if resolved_host_pixi_root else "",
+            "test_image": test_image,
             "live_install_smoke_command": container_install_smoke_command(
                 root,
                 output_dir,
@@ -819,6 +906,7 @@ def create_plan(
             resolved_container_image,
             helper_script,
             resolved_container_state_dir,
+            test_image,
             resolved_host_pixi_root,
         ),
         "commands": commands,
@@ -859,6 +947,11 @@ def parse_args():
         "--container-state-dir",
         type=Path,
         help="Host directory for isolated Singularity HOME, pixi, rattler, and image cache state.",
+    )
+    parser.add_argument(
+        "--test-image-output",
+        type=Path,
+        help="Output .sif path for a dedicated monata-env live-test image.",
     )
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
@@ -903,6 +996,7 @@ def main():
         args.container_image,
         args.session_dir,
         args.container_state_dir,
+        args.test_image_output,
         args.host_pixi_root,
     )
     if args.write_manifest:

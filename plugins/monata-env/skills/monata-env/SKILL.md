@@ -225,11 +225,15 @@ directory.
    runbook item contains the command to run, whether user confirmation is
    required, which previous step ids it `depends_on`, where step
    `stdout_path` and `stderr_path` logs should be captured, and a
-   `record_after` command that must run after the step so the manifest keeps
-   return codes, log file paths, package artifacts, and verification payloads.
+   `status_path` JSON file that the executor updates before and after the
+   command. The `record_after` command must run after the step so the manifest
+   keeps return codes, log file paths, package artifacts, and verification
+   payloads.
    Each mutating or long-running runbook step has `timeout_seconds`; if a step
-   times out, inspect the persisted stdout/stderr logs and use the executor's
-   `next_actions` before retrying with a larger timeout or a local cache.
+   appears to hang, inspect its `status_path` first to confirm whether the
+   executor is still running the command. If a step times out, inspect the
+   persisted stdout/stderr logs and use the executor's `next_actions` before
+   retrying with a larger timeout or a local cache.
    Review the plan's `questions`. Ask the user before doing a
    recommended fallback such as creating temporary detached worktrees,
    installing missing host tools, or writing to the pixi global environment.

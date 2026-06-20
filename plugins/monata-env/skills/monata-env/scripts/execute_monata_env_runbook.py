@@ -124,6 +124,23 @@ def write_stderr(step, stderr):
     return str(path)
 
 
+def write_status(step, status, extra=None):
+    path_text = step.get("status_path")
+    if not path_text:
+        return ""
+    path = Path(path_text).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "id": step.get("id", ""),
+        "status": status,
+        "command": [str(part) for part in step.get("command", [])],
+    }
+    if extra:
+        payload.update(extra)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return str(path)
+
+
 def substitute_returncode(command, var_name, returncode):
     if not var_name:
         return [str(part) for part in command]
@@ -227,6 +244,9 @@ def execute_step(step, args, explicit_steps, results_by_id, selected_ids):
     dependency_result = dependency_skip(step, results_by_id, selected_ids, explicit_steps)
     if dependency_result:
         dependency_result["id"] = step.get("id", "")
+        status_path = write_status(step, dependency_result["status"], dependency_result)
+        if status_path:
+            dependency_result["status_path"] = status_path
         return dependency_result
     reason = should_skip(step, args, explicit_steps)
     item = {
@@ -234,11 +254,18 @@ def execute_step(step, args, explicit_steps, results_by_id, selected_ids):
     }
     if reason:
         item.update({"status": "skipped", "reason": reason})
+        status_path = write_status(step, "skipped", {"reason": reason})
+        if status_path:
+            item["status_path"] = status_path
         return item
     if args.dry_run:
         item.update({"status": "dry-run", "command": [str(part) for part in step["command"]]})
+        status_path = write_status(step, "dry-run", {"command": item["command"]})
+        if status_path:
+            item["status_path"] = status_path
         return item
 
+    status_path = write_status(step, "running")
     result = run_command(step["command"], cwd=args.cwd, timeout=step.get("timeout_seconds"))
     stdout_path = write_stdout(step, result.stdout)
     stderr_path = write_stderr(step, result.stderr)
@@ -249,6 +276,7 @@ def execute_step(step, args, explicit_steps, results_by_id, selected_ids):
             "returncode": result.returncode,
             "stdout_path": stdout_path,
             "stderr_path": stderr_path,
+            "status_path": status_path,
             "stdout": result.stdout[-4000:] if not stdout_path else "",
             "stderr": result.stderr[-4000:] if not stderr_path else "",
             "record_returncode": record_result["returncode"] if record_result else None,
@@ -260,6 +288,17 @@ def execute_step(step, args, explicit_steps, results_by_id, selected_ids):
     actions = next_actions_for_failure(step, item)
     if actions:
         item["next_actions"] = actions
+    if status_path:
+        write_status(
+            step,
+            "executed",
+            {
+                "returncode": item["returncode"],
+                "record_returncode": item["record_returncode"],
+                "stdout_path": item["stdout_path"],
+                "stderr_path": item["stderr_path"],
+            },
+        )
     return item
 
 

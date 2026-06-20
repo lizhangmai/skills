@@ -380,6 +380,7 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
     assert install_step["timeout_seconds"] == 1800
     assert install_step["stdout_path"] == str(output_dir.resolve() / "monata-env-install.out")
     assert install_step["stderr_path"] == str(output_dir.resolve() / "monata-env-install.err")
+    assert install_step["status_path"] == str(output_dir.resolve() / "monata-env-install.status.json")
     assert install_step["record_after"]["returncode_var"] == "INSTALL_RC"
     assert "--command-kind install" in " ".join(install_step["record_after"]["command"])
 
@@ -390,6 +391,7 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
     smoke_stderr = output_dir.resolve() / "monata-env-smoke.err"
     assert smoke_step["stdout_path"] == str(smoke_json)
     assert smoke_step["stderr_path"] == str(smoke_stderr)
+    assert smoke_step["status_path"] == str(output_dir.resolve() / "monata-env-smoke.status.json")
     assert smoke_step["record_after"]["returncode_var"] == "SMOKE_RC"
     smoke_record = " ".join(smoke_step["record_after"]["command"])
     assert "--command-kind smoke" in smoke_record
@@ -942,6 +944,52 @@ def test_execute_runbook_captures_stdout_and_records_verification(tmp_path):
     assert manifest_data["verification"]["smoke"] == payload
     assert manifest_data["execution"]["commands_run"][0]["returncode"] == 0
     assert manifest_data["execution"]["commands_run"][0]["stderr_file"] == str(smoke_err.resolve())
+
+
+def test_execute_runbook_writes_running_and_final_step_status(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    status_path = tmp_path / "install.status.json"
+    command = [
+        sys.executable,
+        "-c",
+        (
+            "import json; "
+            "from pathlib import Path; "
+            f"p=Path({str(status_path)!r}); "
+            "d=json.loads(p.read_text()); "
+            "assert d['status'] == 'running'; "
+            "assert d['id'] == 'install'; "
+            "print('saw-running')"
+        ),
+    ]
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "install",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": command,
+                        "status_path": str(status_path),
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 0, result.stdout
+    summary = json.loads(result.stdout)
+    assert summary["steps"][0]["status_path"] == str(status_path.resolve())
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["id"] == "install"
+    assert status["status"] == "executed"
+    assert status["returncode"] == 0
+    assert status["record_returncode"] is None
 
 
 def test_execute_runbook_requires_confirmation_for_mutating_steps(tmp_path):

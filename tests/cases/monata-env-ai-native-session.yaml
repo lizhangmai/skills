@@ -40,6 +40,7 @@
       "timeout_seconds",
       "stdout_path",
       "stderr_path",
+      "status_path",
       "next_actions",
       "record_after",
       "monata-env-build.out",

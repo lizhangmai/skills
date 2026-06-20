@@ -312,14 +312,19 @@ def record_after_command(
 def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_path, upstream_recommended):
     check_stdout = log_dir / "monata-env-check-channel.json"
     check_stderr = log_dir / "monata-env-check-channel.err"
+    check_status = log_dir / "monata-env-check-channel.status.json"
     build_stdout = log_dir / "monata-env-build.out"
     build_stderr = log_dir / "monata-env-build.err"
+    build_status = log_dir / "monata-env-build.status.json"
     install_stdout = log_dir / "monata-env-install.out"
     install_stderr = log_dir / "monata-env-install.err"
+    install_status = log_dir / "monata-env-install.status.json"
     smoke_json = log_dir / "monata-env-smoke.json"
     smoke_stderr = log_dir / "monata-env-smoke.err"
+    smoke_status = log_dir / "monata-env-smoke.status.json"
     upstream_json = log_dir / "monata-env-upstream-installed.json"
     upstream_stderr = log_dir / "monata-env-upstream-installed.err"
+    upstream_status = log_dir / "monata-env-upstream-installed.status.json"
     return [
         {
             "id": "check_channel",
@@ -330,6 +335,7 @@ def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_
             "command": commands["check_channel"],
             "stdout_path": str(check_stdout),
             "stderr_path": str(check_stderr),
+            "status_path": str(check_status),
             "record_after": record_after_command(
                 manifest_path,
                 "check_channel",
@@ -351,6 +357,7 @@ def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_
             "command": commands["build"],
             "stdout_path": str(build_stdout),
             "stderr_path": str(build_stderr),
+            "status_path": str(build_status),
             "record_after": record_after_command(
                 manifest_path,
                 "build",
@@ -374,6 +381,7 @@ def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_
             "command": commands["install"],
             "stdout_path": str(install_stdout),
             "stderr_path": str(install_stderr),
+            "status_path": str(install_status),
             "record_after": record_after_command(
                 manifest_path,
                 "install",
@@ -393,6 +401,7 @@ def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_
             "command": commands["smoke"],
             "stdout_path": str(smoke_json),
             "stderr_path": str(smoke_stderr),
+            "status_path": str(smoke_status),
             "record_after": record_after_command(
                 manifest_path,
                 "smoke",
@@ -413,6 +422,7 @@ def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_
             "command": commands["upstream_installed_tests"],
             "stdout_path": str(upstream_json),
             "stderr_path": str(upstream_stderr),
+            "status_path": str(upstream_status),
             "record_after": record_after_command(
                 manifest_path,
                 "upstream_installed_tests",

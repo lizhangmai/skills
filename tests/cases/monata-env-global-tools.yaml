@@ -35,12 +35,15 @@
       "monata-env-build.err",
       "artifacts already present",
       "record_monata_env_session.py",
+      "audit_monata_env_manifest.py",
       "smoke_monata_env_tools.py",
       "verification.smoke",
+      "verification.audit",
       "monata-env-install-manifest.json"
     ],
     "installed_files": [
       "SKILL.md",
+      "scripts/audit_monata_env_manifest.py",
       "scripts/detect_monata_tools.py",
       "scripts/execute_monata_env_runbook.py",
       "scripts/plan_monata_env.py",

@@ -276,6 +276,17 @@ def upstream_installed_test_command(local_sources, upstream_profile, env_name, w
     return command
 
 
+def audit_command(manifest_path):
+    return [
+        sys.executable,
+        str(SCRIPT_DIR / "audit_monata_env_manifest.py"),
+        "--manifest",
+        str(manifest_path),
+        "--format",
+        "json",
+    ]
+
+
 def record_after_command(
     manifest_path,
     kind,
@@ -344,6 +355,9 @@ def runbook(
     upstream_json = log_dir / "monata-env-upstream-installed.json"
     upstream_stderr = log_dir / "monata-env-upstream-installed.err"
     upstream_status = log_dir / "monata-env-upstream-installed.status.json"
+    audit_json = log_dir / "monata-env-audit.json"
+    audit_stderr = log_dir / "monata-env-audit.err"
+    audit_status = log_dir / "monata-env-audit.status.json"
     return [
         {
             "id": "check_channel",
@@ -453,6 +467,27 @@ def runbook(
             )
             if commands["upstream_installed_tests"]
             else None,
+        },
+        {
+            "id": "audit",
+            "description": "Audit the manifest against monata-env requirements and produce final next actions.",
+            "recommended": True,
+            "requires_confirmation": False,
+            "depends_on": ["smoke"],
+            "timeout_seconds": 120,
+            "command": commands["audit"],
+            "stdout_path": str(audit_json),
+            "stderr_path": str(audit_stderr),
+            "status_path": str(audit_status),
+            "record_after": record_after_command(
+                manifest_path,
+                "audit",
+                commands["audit"],
+                "AUDIT_RC",
+                stdout_path=audit_json,
+                stderr_path=audit_stderr,
+                verification="audit",
+            ),
         },
     ]
 
@@ -928,6 +963,7 @@ def create_plan(
             env_name,
             upstream_work_dir,
         ),
+        "audit": audit_command(manifest_path),
     }
     profiles = test_profiles(local_source_paths)
     test_image = test_image_plan(
@@ -1076,6 +1112,7 @@ def write_manifest_seed(plan):
         "verification": {
             "smoke": None,
             "upstream_installed": None,
+            "audit": None,
         },
     }
     path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

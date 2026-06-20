@@ -19,6 +19,7 @@
       "--container-image",
       "scripts/execute_monata_env_runbook.py",
       "scripts/prepare_monata_env_test_image.py",
+      "scripts/audit_monata_env_manifest.py",
       "--write-manifest",
       "--host-pixi-root",
       "--container-state-dir",
@@ -69,11 +70,13 @@
       "monata-env-install-manifest.json",
       "verification.smoke",
       "verification.upstream_installed",
+      "verification.audit",
       "recommended commands",
       "fallback"
     ],
     "installed_files": [
       "SKILL.md",
+      "scripts/audit_monata_env_manifest.py",
       "scripts/detect_monata_tools.py",
       "scripts/execute_monata_env_runbook.py",
       "scripts/plan_monata_env.py",

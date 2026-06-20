@@ -20,6 +20,9 @@ PREPARE_IMAGE_SCRIPT = (
 RECORD_SCRIPT = (
     REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "record_monata_env_session.py"
 )
+AUDIT_SCRIPT = (
+    REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "audit_monata_env_manifest.py"
+)
 RATTLER_SCRIPT = (
     REPO_ROOT
     / "plugins"
@@ -94,6 +97,70 @@ def write_manifest_seed(path: Path) -> None:
                 "plan": {"mode": "ai-native-session", "env_name": "monata-env"},
                 "execution": {"commands_run": [], "artifacts": []},
                 "verification": {"smoke": None, "upstream_installed": None},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_auditable_manifest(path: Path, *, plan: dict | None = None, smoke: dict | None = None) -> None:
+    tools = ["ngspice", "openvaf-r", "klayout", "xschem"]
+    path.parent.mkdir(parents=True)
+    manifest_plan = plan or {
+        "mode": "ai-native-session",
+        "env_name": "monata-env",
+        "packages": tools,
+        "commands": {
+            "install": [
+                "pixi",
+                "global",
+                "install",
+                "--environment",
+                "monata-env",
+                "--expose",
+                "ngspice=ngspice",
+                "--expose",
+                "openvaf-r=openvaf-r",
+                "--expose",
+                "klayout=klayout",
+                "--expose",
+                "xschem=xschem",
+            ],
+            "smoke": [sys.executable, str(SMOKE_SCRIPT), "--format", "json"],
+        },
+        "test_profiles": {
+            "upstream_installed": {"recommended": False},
+        },
+    }
+    smoke_payload = smoke or {
+        "ok": True,
+        "tools": {tool: {"ok": True, "reason": "ok", "path": f"/tmp/bin/{tool}"} for tool in tools},
+    }
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "plan": manifest_plan,
+                "execution": {
+                    "commands_run": [
+                        {
+                            "kind": "install",
+                            "command": "pixi global install --environment monata-env",
+                            "returncode": 0,
+                        },
+                        {
+                            "kind": "smoke",
+                            "command": f"{sys.executable} {SMOKE_SCRIPT} --format json",
+                            "returncode": 0,
+                        },
+                    ],
+                    "artifacts": [],
+                },
+                "verification": {
+                    "smoke": smoke_payload,
+                    "upstream_installed": None,
+                },
             }
         )
         + "\n",
@@ -556,6 +623,24 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
     assert f"--stdout-file {smoke_json}" in smoke_record
     assert f"--stderr-file {smoke_stderr}" in smoke_record
     assert f"--verification smoke={smoke_json}" in smoke_record
+
+    audit_step = runbook["audit"]
+    audit_json = output_dir.resolve() / "monata-env-audit.json"
+    audit_stderr = output_dir.resolve() / "monata-env-audit.err"
+    assert audit_step["depends_on"] == ["smoke"]
+    assert audit_step["timeout_seconds"] == 120
+    assert audit_step["stdout_path"] == str(audit_json)
+    assert audit_step["stderr_path"] == str(audit_stderr)
+    assert "audit_monata_env_manifest.py" in " ".join(audit_step["command"])
+    assert f"--manifest {output_dir.resolve() / 'monata-env-install-manifest.json'}" in " ".join(
+        audit_step["command"]
+    )
+    assert audit_step["record_after"]["returncode_var"] == "AUDIT_RC"
+    audit_record = " ".join(audit_step["record_after"]["command"])
+    assert "--command-kind audit" in audit_record
+    assert f"--stdout-file {audit_json}" in audit_record
+    assert f"--stderr-file {audit_stderr}" in audit_record
+    assert f"--verification audit={audit_json}" in audit_record
 
 
 def test_plan_runbook_records_optional_upstream_installed_tests(tmp_path):
@@ -1854,6 +1939,54 @@ def test_record_manifest_preserves_failed_command_when_verification_json_is_inva
     assert data["verification"]["smoke"]["ok"] is False
     assert data["verification"]["smoke"]["reason"] == "invalid-json"
     assert data["verification"]["smoke"]["path"] == str(smoke_output.resolve())
+
+
+def test_audit_manifest_reports_ready_after_successful_smoke(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    write_auditable_manifest(manifest)
+
+    result = run([sys.executable, AUDIT_SCRIPT, "--manifest", manifest, "--format", "json"])
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    requirements = {item["id"]: item for item in data["requirements"]}
+    assert data["ok"] is True
+    assert data["status"] == "ready"
+    assert data["summary"]["env_name"] == "monata-env"
+    assert requirements["expected-tool-plan"]["ok"] is True
+    assert requirements["no-monata-or-techlibs"]["ok"] is True
+    assert requirements["install-command-succeeded"]["ok"] is True
+    assert requirements["installed-tool-smoke"]["ok"] is True
+    assert data["next_actions"] == []
+
+
+def test_audit_manifest_blocks_monata_package_or_techlib_bootstrap(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    tools = ["ngspice", "openvaf-r", "klayout", "xschem"]
+    write_auditable_manifest(
+        manifest,
+        plan={
+            "mode": "ai-native-session",
+            "env_name": "monata-env",
+            "packages": [*tools, "monata"],
+            "commands": {
+                "install": ["pixi", "global", "install", "--environment", "monata-env", "monata"],
+                "techlib": ["pixi", "run", "python", "bootstrap_monata_techlibs.py"],
+            },
+        },
+    )
+
+    result = run([sys.executable, AUDIT_SCRIPT, "--manifest", manifest, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    data = json.loads(result.stdout)
+    requirements = {item["id"]: item for item in data["requirements"]}
+    assert data["ok"] is False
+    assert data["status"] == "blocked"
+    assert requirements["no-monata-or-techlibs"]["ok"] is False
+    assert "monata" in requirements["no-monata-or-techlibs"]["problems"]
+    action_ids = [item["id"] for item in data["next_actions"]]
+    assert action_ids[0] == "remove-monata-techlib-bootstrap"
 
 
 def test_rattler_local_source_ref_rejects_mismatched_checkout(tmp_path):

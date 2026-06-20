@@ -298,6 +298,11 @@ directory.
    refreshing the conda-build helper, creating a detached source worktree at
    the required tag, or inspecting missing exposed tool commands after smoke
    failure.
+   The final `audit` runbook step calls
+   `scripts/audit_monata_env_manifest.py`; it reads the manifest and reports
+   whether the environment is ready, blocked, or needs additional user choices.
+   Use `verification.audit` and the audit `next_actions` as the final
+   completion gate before telling the user the setup is done.
 
 5. Detect the required circuit-tool packages from the Monata workspace when you
    need a shell list outside the planner:
@@ -480,13 +485,15 @@ directory.
    the same work dir refreshes the copied Xschem test tree before execution.
 
 12. Prefer `scripts/execute_monata_env_runbook.py` so `runbook[*].record_after`
-   runs automatically after build, install, smoke, and upstream test commands.
+   runs automatically after build, install, smoke, upstream test, and audit
+   commands.
    If you must execute a command outside the planner output, call
    `scripts/record_monata_env_session.py` directly. The manifest must keep the
    plan JSON, exact commands run, package artifacts, local-source refs, pixi
    global environment name, per-step `stdout_file` and `stderr_file` logs,
    `verification.smoke`, and
-   `verification.upstream_installed` when run.
+   `verification.upstream_installed` when run. The final manifest should also
+   include `verification.audit` from `scripts/audit_monata_env_manifest.py`.
 
    The `check_channel` step records artifacts already present in the local
    channel. This matters when all packages already exist and build is skipped;
@@ -513,6 +520,29 @@ directory.
    After the pixi global install, record the exact install command and return
    code. If a step fails, still record its command and return code before
    diagnosing or asking the user for a fallback such as a local source checkout.
+
+   After smoke verification, audit the manifest:
+
+   ```bash
+   AUDIT_JSON="$CONDA_BUILD_OUTPUT_DIR/monata-env-audit.json"
+   AUDIT_ERR="$CONDA_BUILD_OUTPUT_DIR/monata-env-audit.err"
+   if python scripts/audit_monata_env_manifest.py \
+       --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+       --format json > "$AUDIT_JSON" 2> "$AUDIT_ERR"; then
+     AUDIT_RC=0
+   else
+     AUDIT_RC=$?
+   fi
+   python scripts/record_monata_env_session.py \
+     --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+     --command-kind audit \
+     --command "python scripts/audit_monata_env_manifest.py --manifest ... --format json" \
+     --returncode "$AUDIT_RC" \
+     --stdout-file "$AUDIT_JSON" \
+     --stderr-file "$AUDIT_ERR" \
+     --verification audit="$AUDIT_JSON"
+   test "$AUDIT_RC" -eq 0
+   ```
 
 ## Existing Circuit-Tool Environment
 

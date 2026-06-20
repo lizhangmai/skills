@@ -33,6 +33,7 @@
       "record_after",
       "monata-env-build.out",
       "monata-env-build.err",
+      "artifacts already present",
       "record_monata_env_session.py",
       "smoke_monata_env_tools.py",
       "verification.smoke",

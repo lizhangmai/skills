@@ -195,7 +195,7 @@ def install_command(packages, output_dir, env_name):
 
 
 def select_build_packages(packages, missing, local_sources):
-    selected = set(missing) | set(local_sources)
+    selected = set(missing)
     return [package for package in packages if package in selected]
 
 
@@ -269,7 +269,7 @@ def record_after_command(
     }
 
 
-def runbook(commands, build_packages, output_dir, manifest_path, upstream_recommended):
+def runbook(commands, packages, build_packages, output_dir, manifest_path, upstream_recommended):
     check_stdout = output_dir / "monata-env-check-channel.json"
     check_stderr = output_dir / "monata-env-check-channel.err"
     build_stdout = output_dir / "monata-env-build.out"
@@ -296,6 +296,8 @@ def runbook(commands, build_packages, output_dir, manifest_path, upstream_recomm
                 "CHECK_CHANNEL_RC",
                 stdout_path=check_stdout,
                 stderr_path=check_stderr,
+                artifact_dir=output_dir,
+                packages=packages,
             ),
         },
         {
@@ -325,7 +327,7 @@ def runbook(commands, build_packages, output_dir, manifest_path, upstream_recomm
             "description": "Install exposed circuit-tool commands into the pixi global monata-env environment.",
             "recommended": True,
             "requires_confirmation": True,
-            "depends_on": ["build"],
+            "depends_on": ["build"] if commands["build"] else ["check_channel"],
             "command": commands["install"],
             "stdout_path": str(install_stdout),
             "stderr_path": str(install_stderr),
@@ -385,6 +387,12 @@ def decisions(root, output_dir, local_source_paths, profiles, build_needed):
     source_paths = {package: str(path) for package, path in local_source_paths.items()}
     has_local_sources = bool(source_paths)
     upstream_recommended = profiles["upstream_installed"]["recommended"]
+    if not build_needed:
+        source_default = "existing_channel_only"
+    elif has_local_sources:
+        source_default = "local_sources"
+    else:
+        source_default = "network"
     isolation_command = (
         "python scripts/skill_container.py "
         "--state-dir /tmp/monata-env-skill-test "
@@ -418,19 +426,19 @@ def decisions(root, output_dir, local_source_paths, profiles, build_needed):
         {
             "id": "source_policy",
             "prompt": "How should missing circuit-tool packages be sourced?",
-            "default": "local_sources" if has_local_sources else "network",
+            "default": source_default,
             "options": [
                 {
                     "id": "local_sources",
                     "label": "Use provided local sources",
-                    "recommended": has_local_sources,
+                    "recommended": build_needed and has_local_sources,
                     "sources": source_paths,
                     "effect": "Builds from trusted local checkouts and still validates required upstream refs.",
                 },
                 {
                     "id": "network",
                     "label": "Fetch pinned upstream sources",
-                    "recommended": not has_local_sources,
+                    "recommended": build_needed and not has_local_sources,
                     "effect": "Uses the bundled recipes' pinned public upstream URLs.",
                 },
                 {
@@ -582,6 +590,7 @@ def create_plan(root, output_dir, local_source_values, env_name, conda_build_hel
         "commands": commands,
         "runbook": runbook(
             commands,
+            packages,
             build_packages,
             output_dir,
             manifest_path,

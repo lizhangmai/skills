@@ -342,6 +342,10 @@ directory.
    `verification.smoke`, and
    `verification.upstream_installed` when run.
 
+   The `check_channel` step records artifacts already present in the local
+   channel. This matters when all packages already exist and build is skipped;
+   the manifest still needs package artifact evidence for the install.
+
    After a build command, record generated artifacts without requiring
    `conda index`:
 

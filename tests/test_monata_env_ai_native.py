@@ -98,6 +98,19 @@ def write_manifest_seed(path: Path) -> None:
     )
 
 
+def write_channel_artifacts(output_dir: Path, packages: list[str]) -> None:
+    linux64 = output_dir / "linux-64"
+    linux64.mkdir(parents=True)
+    versions = {
+        "ngspice": "46.0",
+        "openvaf-r": "0.4.0",
+        "klayout": "0.30.9",
+        "xschem": "3.4.7",
+    }
+    for package in packages:
+        (linux64 / f"{package}-{versions[package]}-hb0f4dca_0.conda").write_text("", encoding="utf-8")
+
+
 def test_plan_reports_ref_mismatch_and_recommended_commands(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"
@@ -137,6 +150,56 @@ def test_plan_reports_ref_mismatch_and_recommended_commands(tmp_path):
     assert "--local-source-ref" in build_command
     assert "klayout=v0.30.9" in build_command
     assert data["manifest"]["path"].endswith("monata-env-install-manifest.json")
+
+
+def test_plan_skips_build_when_existing_channel_has_local_source_packages(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    write_channel_artifacts(output_dir, ["ngspice", "openvaf-r", "klayout", "xschem"])
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--local-source",
+            f"xschem={xschem_source}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["channel"]["missing"] == []
+    assert data["build_needed"] is False
+    assert data["build_packages"] == []
+    assert data["commands"]["build"] == []
+
+    runbook = {step["id"]: step for step in data["runbook"]}
+    assert runbook["build"]["recommended"] is False
+    assert runbook["build"]["record_after"] is None
+    check_record = " ".join(runbook["check_channel"]["record_after"]["command"])
+    assert f"--artifact-dir {output_dir.resolve()}" in check_record
+    for package in ("ngspice", "openvaf-r", "klayout", "xschem"):
+        assert f"--package {package}" in check_record
+    assert runbook["install"]["depends_on"] == ["check_channel"]
+
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    source_options = {option["id"]: option for option in decisions["source_policy"]["options"]}
+    assert decisions["source_policy"]["default"] == "existing_channel_only"
+    assert source_options["existing_channel_only"]["recommended"] is True
+    assert source_options["local_sources"]["recommended"] is False
 
 
 def test_plan_recommends_upstream_installed_tests_when_sources_are_provided(tmp_path):

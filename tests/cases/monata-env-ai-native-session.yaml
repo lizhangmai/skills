@@ -28,6 +28,8 @@
       "record_after",
       "monata-env-build.out",
       "monata-env-smoke.err",
+      "check_channel",
+      "artifacts already present",
       "source policy",
       "test isolation",
       "test_profiles",

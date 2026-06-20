@@ -14,21 +14,31 @@ DEFAULT_ENV_NAME = "monata-env"
 
 
 def run(command, cwd=None, env=None, timeout=300):
-    result = subprocess.run(
-        [str(part) for part in command],
-        cwd=str(cwd) if cwd else None,
-        env=env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        check=False,
-        timeout=timeout,
-    )
+    command = [str(part) for part in command]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=str(cwd) if cwd else None,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=timeout,
+        )
+        returncode = result.returncode
+        output = result.stdout
+    except subprocess.TimeoutExpired as exc:
+        output = exc.stdout or ""
+        if isinstance(output, bytes):
+            output = output.decode(errors="replace")
+        output = (output + f"\ntimed out after {timeout}s").strip() + "\n"
+        returncode = 124
     return {
-        "command": [str(part) for part in command],
+        "command": command,
         "cwd": str(cwd) if cwd else "",
-        "returncode": result.returncode,
-        "output": result.stdout[-6000:],
+        "returncode": returncode,
+        "output": output[-6000:],
     }
 
 
@@ -51,8 +61,34 @@ def failure(reason, source=None):
     return item
 
 
-def command_path(name):
-    return shutil.which(name)
+def checks_reason(checks):
+    if all(item["returncode"] == 0 for item in checks):
+        return "ok"
+    if any(item["returncode"] == 124 for item in checks):
+        return "command-timeout"
+    return "command-failed"
+
+
+def env_executable(names, env_name=None, env_prefix=None):
+    if isinstance(names, str):
+        names = (names,)
+    prefixes = []
+    if env_prefix:
+        prefixes.append(Path(env_prefix).expanduser().resolve())
+    if env_name:
+        prefix = pixi_env_prefix(env_name)
+        if prefix:
+            prefixes.append(prefix)
+    for prefix in prefixes:
+        for name in names:
+            candidate = prefix / "bin" / name
+            if candidate.exists():
+                return str(candidate)
+    for name in names:
+        path = shutil.which(name)
+        if path:
+            return path
+    return None
 
 
 def source_path(value):
@@ -94,7 +130,7 @@ def run_klayout_upstream(source, work_dir, env_name, env_prefix, timeout):
     if not source.exists():
         return failure("source-missing", source)
 
-    klayout = command_path("klayout")
+    klayout = env_executable("klayout", env_name=env_name, env_prefix=env_prefix)
     if not klayout:
         return failure("tool-missing", source)
 
@@ -114,7 +150,7 @@ def run_klayout_upstream(source, work_dir, env_name, env_prefix, timeout):
     ok = all(item["returncode"] == 0 for item in checks)
     return {
         "ok": ok,
-        "reason": "ok" if ok else "command-failed",
+        "reason": checks_reason(checks),
         "source": str(source),
         "checks": checks,
     }
@@ -129,27 +165,29 @@ def copy_xschem_test_tree(source, work_dir):
     return tests_dest
 
 
-def run_xschem_upstream(source, work_dir, profile, timeout):
+def run_xschem_upstream(source, work_dir, env_name, env_prefix, profile, timeout):
     if source is None:
         return skipped("source-not-provided")
     if not source.exists():
         return failure("source-missing", source)
     if not (source / "tests").is_dir() or not (source / "xschem_library").is_dir():
         return failure("source-test-missing", source)
-    if not command_path("xschem"):
+    xschem = env_executable("xschem", env_name=env_name, env_prefix=env_prefix)
+    if not xschem:
         return failure("tool-missing", source)
-    if profile == "full" and not command_path("tclsh"):
+    tclsh = env_executable(("tclsh", "tclsh8.6", "tclsh8.7"), env_name=env_name, env_prefix=env_prefix)
+    if profile == "full" and not tclsh:
         return failure("tclsh-missing", source)
 
     tests_dir = copy_xschem_test_tree(source, work_dir)
     if profile == "full":
-        check = run(["tclsh", "run_regression.tcl"], cwd=tests_dir, timeout=timeout)
+        check = run([tclsh, "run_regression.tcl"], cwd=tests_dir, timeout=timeout)
     else:
         output = tests_dir / "create_save" / "results" / "simple_inv.sch"
         output.parent.mkdir(parents=True, exist_ok=True)
         check = run(
             [
-                "xschem",
+                xschem,
                 output,
                 "--pipe",
                 "-d",
@@ -164,7 +202,7 @@ def run_xschem_upstream(source, work_dir, profile, timeout):
         check["output_size"] = output.stat().st_size if output.exists() else 0
     return {
         "ok": check["returncode"] == 0,
-        "reason": "ok" if check["returncode"] == 0 else "command-failed",
+        "reason": checks_reason([check]),
         "source": str(source),
         "checks": [check],
     }
@@ -175,7 +213,7 @@ def parse_args():
     parser.add_argument("--klayout-source", type=Path, help="KLayout upstream checkout containing testdata/.")
     parser.add_argument("--xschem-source", type=Path, help="Xschem upstream checkout containing tests/ and xschem_library/.")
     parser.add_argument("--env-name", default=DEFAULT_ENV_NAME, help="pixi global environment name.")
-    parser.add_argument("--env-prefix", type=Path, help="Installed environment prefix, used for Python-binding tests.")
+    parser.add_argument("--env-prefix", type=Path, help="Installed environment prefix, used for env-internal tools.")
     parser.add_argument("--profile", choices=("basic", "full"), default="basic", help="Upstream test depth.")
     parser.add_argument("--format", choices=("json", "summary"), default="summary")
     parser.add_argument("--work-dir", type=Path, help="Working directory for copied upstream tests.")
@@ -201,7 +239,14 @@ def run_profiles(args):
                 args.env_prefix,
                 args.timeout,
             ),
-            "xschem": run_xschem_upstream(source_path(args.xschem_source), work_dir, args.profile, args.timeout),
+            "xschem": run_xschem_upstream(
+                source_path(args.xschem_source),
+                work_dir,
+                args.env_name,
+                args.env_prefix,
+                args.profile,
+                args.timeout,
+            ),
         }
         return {
             "ok": all(item["ok"] for item in profiles.values()),

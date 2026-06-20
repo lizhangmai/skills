@@ -218,6 +218,24 @@ def next_actions_for_failure(step, item):
                 "prompt": "Network source download failed. Ask the user for a local KLayout/Xschem source checkout or archive path, then re-run the planner with --local-source.",
             }
         )
+    if step_id == "upstream_installed_tests" and "tclsh-missing" in text:
+        actions.extend(
+            [
+                {
+                    "id": "install-upstream-test-dependency",
+                    "title": "Install or expose Tcl for full upstream tests",
+                    "requires_user_input": True,
+                    "prompt": "The full Xschem upstream regression needs tclsh. Ask whether to install/expose Tcl in monata-env, run with an env prefix containing tclsh, or use the basic upstream profile.",
+                },
+                {
+                    "id": "use-basic-upstream-profile",
+                    "title": "Re-plan with the basic upstream profile",
+                    "requires_user_input": False,
+                    "command": "python scripts/plan_monata_env.py --upstream-profile basic ...",
+                    "prompt": "The basic upstream profile avoids the Xschem Tcl regression driver and still validates installed KLayout/Xschem with smaller upstream subsets.",
+                },
+            ]
+        )
     if step_id == "smoke" or "tool-missing" in text or '"reason": "missing"' in text:
         actions.append(
             {

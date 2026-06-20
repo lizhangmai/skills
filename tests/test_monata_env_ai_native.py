@@ -105,7 +105,13 @@ def write_manifest_seed(path: Path) -> None:
     )
 
 
-def write_auditable_manifest(path: Path, *, plan: dict | None = None, smoke: dict | None = None) -> None:
+def write_auditable_manifest(
+    path: Path,
+    *,
+    plan: dict | None = None,
+    smoke: dict | None = None,
+    artifacts: list[dict] | None = None,
+) -> None:
     tools = ["ngspice", "openvaf-r", "klayout", "xschem"]
     path.parent.mkdir(parents=True)
     manifest_plan = plan or {
@@ -156,7 +162,7 @@ def write_auditable_manifest(path: Path, *, plan: dict | None = None, smoke: dic
                             "returncode": 0,
                         },
                     ],
-                    "artifacts": [],
+                    "artifacts": artifacts or [],
                 },
                 "verification": {
                     "smoke": smoke_payload,
@@ -2058,6 +2064,57 @@ def test_audit_manifest_reports_ready_after_successful_smoke(tmp_path):
     assert requirements["install-command-succeeded"]["ok"] is True
     assert requirements["installed-tool-smoke"]["ok"] is True
     assert data["next_actions"] == []
+
+
+def test_audit_manifest_reports_evidence_for_user_facing_status(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    tools = ["ngspice", "openvaf-r", "klayout", "xschem"]
+    artifacts = [
+        {
+            "package": tool,
+            "path": str((tmp_path / "channel" / "linux-64" / f"{tool}-1.0-0.conda").resolve()),
+            "filename": f"{tool}-1.0-0.conda",
+            "size": 123,
+        }
+        for tool in tools
+    ]
+    write_auditable_manifest(manifest, artifacts=artifacts)
+
+    result = run([sys.executable, AUDIT_SCRIPT, "--manifest", manifest, "--format", "json"])
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    evidence = data["evidence"]
+    assert evidence["commands"]["by_kind"]["install"]["ok"] is True
+    assert evidence["commands"]["by_kind"]["smoke"]["returncode"] == 0
+    assert evidence["artifacts"]["present_packages"] == tools
+    assert evidence["artifacts"]["missing_packages"] == []
+    assert evidence["verification"]["smoke"] == "passed"
+    assert evidence["verification"]["upstream_installed"] == "not-requested"
+
+
+def test_audit_summary_prints_user_facing_status_report(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    tools = ["ngspice", "openvaf-r", "klayout", "xschem"]
+    artifacts = [
+        {
+            "package": tool,
+            "path": str((tmp_path / "channel" / "linux-64" / f"{tool}-1.0-0.conda").resolve()),
+            "filename": f"{tool}-1.0-0.conda",
+            "size": 123,
+        }
+        for tool in tools
+    ]
+    write_auditable_manifest(manifest, artifacts=artifacts)
+
+    result = run([sys.executable, AUDIT_SCRIPT, "--manifest", manifest, "--format", "summary"])
+
+    assert result.returncode == 0, result.stdout
+    assert "status: ready" in result.stdout
+    assert "env_name: monata-env" in result.stdout
+    assert "artifacts: ngspice openvaf-r klayout xschem" in result.stdout
+    assert "verification: smoke=passed upstream_installed=not-requested live_state=not-checked" in result.stdout
+    assert "next_actions: none" in result.stdout
 
 
 def test_audit_manifest_blocks_monata_package_or_techlib_bootstrap(tmp_path):

@@ -21,6 +21,8 @@
       "scripts/prepare_monata_env_test_image.py",
       "scripts/audit_monata_env_manifest.py",
       "--check-live",
+      "--format summary",
+      "artifact package coverage",
       "pixi global list --json",
       "--write-manifest",
       "--host-pixi-root",

@@ -321,6 +321,67 @@ def live_state_requirement(manifest):
     )
 
 
+def command_evidence(manifest):
+    records = manifest.get("execution", {}).get("commands_run", [])
+    by_kind = {}
+    for record in records:
+        kind = record.get("kind", "")
+        if not kind:
+            continue
+        item = {
+            "command": record.get("command", ""),
+            "returncode": record.get("returncode"),
+            "ok": record.get("returncode") == 0,
+        }
+        if record.get("stdout_file"):
+            item["stdout_file"] = record["stdout_file"]
+        if record.get("stderr_file"):
+            item["stderr_file"] = record["stderr_file"]
+        by_kind[kind] = item
+    return {
+        "total": len(records),
+        "by_kind": by_kind,
+    }
+
+
+def artifact_evidence(manifest):
+    artifacts = manifest.get("execution", {}).get("artifacts", [])
+    present = []
+    seen = set()
+    for artifact in artifacts:
+        package = artifact.get("package")
+        if package and package not in seen:
+            present.append(package)
+            seen.add(package)
+    missing = [tool for tool in EXPECTED_TOOLS if tool not in seen]
+    return {
+        "expected_packages": EXPECTED_TOOLS,
+        "present_packages": present,
+        "missing_packages": missing,
+        "files": artifacts,
+    }
+
+
+def verification_status(manifest, recommendation, live):
+    verification = manifest.get("verification", {})
+    smoke = verification.get("smoke")
+    audit_payload = verification.get("audit")
+    return {
+        "smoke": "passed" if isinstance(smoke, dict) and smoke.get("ok") is True else "failed" if smoke else "not-run",
+        "upstream_installed": recommendation["status"],
+        "audit": "passed" if isinstance(audit_payload, dict) and audit_payload.get("ok") is True else "failed" if audit_payload else "not-run",
+        "live_state": "matched" if live and live["ok"] else "mismatch" if live else "not-checked",
+    }
+
+
+def evidence(manifest, recommendation, live):
+    return {
+        "commands": command_evidence(manifest),
+        "artifacts": artifact_evidence(manifest),
+        "verification": verification_status(manifest, recommendation, live),
+    }
+
+
 def next_actions(requirements, recommendation):
     actions = []
     by_id = {item["id"]: item for item in requirements}
@@ -399,6 +460,7 @@ def audit(manifest_path, check_live=False):
     actions = next_actions(requirements, recommendation)
     status = "ready" if ok else "blocked"
     live = next((item for item in requirements if item["id"] == "live-monata-env"), None)
+    verification = verification_status(manifest, recommendation, live)
     return {
         "ok": ok,
         "status": status,
@@ -408,9 +470,10 @@ def audit(manifest_path, check_live=False):
             "required_tools": EXPECTED_TOOLS,
             "install_ok": requirements[2]["ok"],
             "smoke_ok": requirements[3]["ok"],
-            "live_state": "matched" if live and live["ok"] else "mismatch" if live else "not-checked",
+            "live_state": verification["live_state"],
             "upstream_installed": recommendation["status"],
         },
+        "evidence": evidence(manifest, recommendation, live),
         "requirements": requirements,
         "recommendations": [recommendation],
         "next_actions": actions,
@@ -419,9 +482,28 @@ def audit(manifest_path, check_live=False):
 
 def print_summary(report):
     print(f"status: {report['status']}")
+    print(f"env_name: {report['summary']['env_name']}")
+    artifacts = report.get("evidence", {}).get("artifacts", {})
+    present = artifacts.get("present_packages") or []
+    missing = artifacts.get("missing_packages") or []
+    print("artifacts: " + (" ".join(present) if present else "none"))
+    if missing:
+        print("missing_artifacts: " + " ".join(missing))
+    verification = report.get("evidence", {}).get("verification", {})
+    print(
+        "verification: "
+        f"smoke={verification.get('smoke', 'unknown')} "
+        f"upstream_installed={verification.get('upstream_installed', 'unknown')} "
+        f"live_state={verification.get('live_state', 'unknown')}"
+    )
     for item in report["requirements"]:
         status = "PASS" if item["ok"] else "FAIL"
         print(f"{status} {item['id']}: {item.get('reason', '')}")
+    actions = report.get("next_actions", [])
+    if actions:
+        print("next_actions: " + " ".join(action.get("id", "") for action in actions if action.get("id")))
+    else:
+        print("next_actions: none")
 
 
 def parse_args():

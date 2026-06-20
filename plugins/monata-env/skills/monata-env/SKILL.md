@@ -311,6 +311,10 @@ directory.
    `scripts/execute_monata_env_runbook.py` preserves `next_actions` emitted in
    JSON stdout, so audit-specific repair suggestions should appear directly in
    the executor summary.
+   For the final user-facing install report, run the same audit command with
+   `--format summary`; it prints environment name, artifact package coverage,
+   smoke/upstream/live verification status, requirement pass/fail lines, and
+   any remaining `next_actions`.
 
 5. Detect the required circuit-tool packages from the Monata workspace when you
    need a shell list outside the planner:
@@ -569,6 +573,15 @@ directory.
      --stderr-file "$AUDIT_ERR" \
      --verification audit="$AUDIT_JSON"
    test "$AUDIT_RC" -eq 0
+   ```
+
+   To produce a concise human-readable status report from the same manifest:
+
+   ```bash
+   python scripts/audit_monata_env_manifest.py \
+     --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+     --check-live \
+     --format summary
    ```
 
 ## Existing Circuit-Tool Environment

@@ -46,6 +46,25 @@ def resolve_container_image(value=None):
     return str(Path(text).expanduser().resolve())
 
 
+def find_skills_repo_root(helper_script):
+    if not helper_script or not helper_script.exists():
+        return None
+    for candidate in helper_script.resolve().parents:
+        if (
+            candidate.joinpath("plugins", "monata-env", "skills", "monata-env", "scripts", "plan_monata_env.py").exists()
+            and candidate.joinpath(
+                "plugins",
+                "conda-build",
+                "skills",
+                "conda-build",
+                "scripts",
+                "rattler_channel.py",
+            ).exists()
+        ):
+            return candidate
+    return None
+
+
 def conda_build_helper_candidates():
     candidates = []
     try:
@@ -279,17 +298,17 @@ def record_after_command(
     }
 
 
-def runbook(commands, packages, build_packages, output_dir, manifest_path, upstream_recommended):
-    check_stdout = output_dir / "monata-env-check-channel.json"
-    check_stderr = output_dir / "monata-env-check-channel.err"
-    build_stdout = output_dir / "monata-env-build.out"
-    build_stderr = output_dir / "monata-env-build.err"
-    install_stdout = output_dir / "monata-env-install.out"
-    install_stderr = output_dir / "monata-env-install.err"
-    smoke_json = output_dir / "monata-env-smoke.json"
-    smoke_stderr = output_dir / "monata-env-smoke.err"
-    upstream_json = output_dir / "monata-env-upstream-installed.json"
-    upstream_stderr = output_dir / "monata-env-upstream-installed.err"
+def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_path, upstream_recommended):
+    check_stdout = log_dir / "monata-env-check-channel.json"
+    check_stderr = log_dir / "monata-env-check-channel.err"
+    build_stdout = log_dir / "monata-env-build.out"
+    build_stderr = log_dir / "monata-env-build.err"
+    install_stdout = log_dir / "monata-env-install.out"
+    install_stderr = log_dir / "monata-env-install.err"
+    smoke_json = log_dir / "monata-env-smoke.json"
+    smoke_stderr = log_dir / "monata-env-smoke.err"
+    upstream_json = log_dir / "monata-env-upstream-installed.json"
+    upstream_stderr = log_dir / "monata-env-upstream-installed.err"
     return [
         {
             "id": "check_channel",
@@ -306,7 +325,7 @@ def runbook(commands, packages, build_packages, output_dir, manifest_path, upstr
                 "CHECK_CHANNEL_RC",
                 stdout_path=check_stdout,
                 stderr_path=check_stderr,
-                artifact_dir=output_dir,
+                artifact_dir=artifact_dir,
                 packages=packages,
             ),
         },
@@ -326,7 +345,7 @@ def runbook(commands, packages, build_packages, output_dir, manifest_path, upstr
                 "BUILD_RC",
                 stdout_path=build_stdout,
                 stderr_path=build_stderr,
-                artifact_dir=output_dir,
+                artifact_dir=artifact_dir,
                 packages=build_packages,
             )
             if commands["build"]
@@ -393,7 +412,7 @@ def runbook(commands, packages, build_packages, output_dir, manifest_path, upstr
     ]
 
 
-def decisions(root, output_dir, local_source_paths, profiles, build_needed, container_image):
+def decisions(root, output_dir, local_source_paths, profiles, build_needed, container_image, helper_script):
     source_paths = {package: str(path) for package, path in local_source_paths.items()}
     has_local_sources = bool(source_paths)
     upstream_recommended = profiles["upstream_installed"]["recommended"]
@@ -403,17 +422,30 @@ def decisions(root, output_dir, local_source_paths, profiles, build_needed, cont
         source_default = "local_sources"
     else:
         source_default = "network"
+    skills_repo_root = find_skills_repo_root(helper_script)
+    repo_root_option = ""
+    container_plan_script = "/mnt/skills/scripts/plan_monata_env.py"
+    container_helper_arg = ""
+    if skills_repo_root:
+        repo_root_option = f"--repo-root {shlex.quote(str(skills_repo_root))} "
+        container_plan_script = "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py"
+        container_helper_arg = (
+            " --conda-build-helper "
+            "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py"
+        )
     isolation_command = (
         "python scripts/skill_container.py "
         "--state-dir /tmp/monata-env-skill-test "
+        f"{repo_root_option}"
         f"--workspace {shlex.quote(str(Path(root).resolve()))} "
         f"--channel {shlex.quote(str(output_dir))} "
         f"--image {shlex.quote(container_image)} "
         "--require-command python3 "
         "--dry-run -- "
-        "bash -lc 'cd /mnt/project && python3 "
-        "/mnt/skills/scripts/plan_monata_env.py "
-        "--root /mnt/project --output-dir /tmp/skill-channel --write-manifest --format json'"
+        f"bash -lc 'cd /mnt/project && python3 {container_plan_script} "
+        f"--root /mnt/project --output-dir /tmp/skill-channel "
+        f"--session-dir /tmp/skill-home/monata-env-session{container_helper_arg} "
+        "--write-manifest --format json'"
     )
     return [
         {
@@ -551,11 +583,20 @@ def questions(local_sources):
     return items
 
 
-def create_plan(root, output_dir, local_source_values, env_name, conda_build_helper=None, container_image=None):
+def create_plan(
+    root,
+    output_dir,
+    local_source_values,
+    env_name,
+    conda_build_helper=None,
+    container_image=None,
+    session_dir=None,
+):
     detected = detect(root)
     packages = detected["packages"]
     helper_script = resolve_conda_build_helper(conda_build_helper)
     resolved_container_image = resolve_container_image(container_image)
+    resolved_session_dir = Path(session_dir).expanduser().resolve() if session_dir else output_dir
     local_source_paths = parse_key_path(local_source_values)
     local_sources = {
         package: local_source_status(package, path)
@@ -576,7 +617,11 @@ def create_plan(root, output_dir, local_source_values, env_name, conda_build_hel
         }
         for package in packages
     }
-    manifest_path = output_dir / "monata-env-install-manifest.json" if output_dir else Path("monata-env-install-manifest.json")
+    manifest_path = (
+        resolved_session_dir / "monata-env-install-manifest.json"
+        if resolved_session_dir
+        else Path("monata-env-install-manifest.json")
+    )
     commands = {
         "check_channel": check_channel_command(packages, output_dir, helper_script),
         "build": build_command(build_packages, output_dir, selected_local_sources, helper_script) if build_packages else [],
@@ -592,6 +637,10 @@ def create_plan(root, output_dir, local_source_values, env_name, conda_build_hel
         "packages": packages,
         "detector": detected,
         "channel": channel,
+        "session": {
+            "dir": str(resolved_session_dir) if resolved_session_dir else "",
+            "purpose": "Stores the monata-env setup manifest and runbook logs.",
+        },
         "local_sources": local_sources,
         "tools": tools,
         "helper": {
@@ -599,12 +648,21 @@ def create_plan(root, output_dir, local_source_values, env_name, conda_build_hel
             "conda_build_script_exists": helper_script.exists(),
         },
         "questions": questions(local_sources),
-        "decisions": decisions(root, output_dir, local_source_paths, profiles, bool(build_packages), resolved_container_image),
+        "decisions": decisions(
+            root,
+            output_dir,
+            local_source_paths,
+            profiles,
+            bool(build_packages),
+            resolved_container_image,
+            helper_script,
+        ),
         "commands": commands,
         "runbook": runbook(
             commands,
             packages,
             build_packages,
+            resolved_session_dir,
             output_dir,
             manifest_path,
             profiles["upstream_installed"]["recommended"],
@@ -627,6 +685,7 @@ def parse_args():
     parser.add_argument("--env-name", default="monata-env", help="pixi global environment name.")
     parser.add_argument("--conda-build-helper", type=Path, help="Path to conda-build helper rattler_channel.py.")
     parser.add_argument("--container-image", help="Singularity image URI or local .sif path for isolated live checks.")
+    parser.add_argument("--session-dir", type=Path, help="Directory for the manifest and runbook logs.")
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
     return parser.parse_args()
@@ -668,6 +727,7 @@ def main():
         args.env_name,
         args.conda_build_helper,
         args.container_image,
+        args.session_dir,
     )
     if args.write_manifest:
         write_manifest_seed(plan)

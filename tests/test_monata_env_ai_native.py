@@ -202,6 +202,42 @@ def test_plan_skips_build_when_existing_channel_has_local_source_packages(tmp_pa
     assert source_options["local_sources"]["recommended"] is False
 
 
+def test_plan_session_dir_keeps_logs_and_manifest_separate_from_channel(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    write_monata_workspace(workspace)
+    write_channel_artifacts(output_dir, ["ngspice", "openvaf-r", "klayout", "xschem"])
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["channel"]["output_dir"] == str(output_dir.resolve())
+    assert data["session"]["dir"] == str(session_dir.resolve())
+    assert data["manifest"]["path"] == str(session_dir.resolve() / "monata-env-install-manifest.json")
+
+    runbook = {step["id"]: step for step in data["runbook"]}
+    assert runbook["check_channel"]["stdout_path"] == str(session_dir.resolve() / "monata-env-check-channel.json")
+    assert runbook["install"]["stdout_path"] == str(session_dir.resolve() / "monata-env-install.out")
+    check_record = " ".join(runbook["check_channel"]["record_after"]["command"])
+    assert f"--artifact-dir {output_dir.resolve()}" in check_record
+    assert f"--manifest {session_dir.resolve() / 'monata-env-install-manifest.json'}" in check_record
+
+
 def test_plan_recommends_upstream_installed_tests_when_sources_are_provided(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"
@@ -397,11 +433,14 @@ def test_plan_decisions_offer_network_source_and_isolated_testing_defaults(tmp_p
     assert decisions["test_isolation"]["default"] == "singularity"
     isolation_options = {option["id"]: option for option in decisions["test_isolation"]["options"]}
     assert isolation_options["singularity"]["recommended"] is True
-    assert "scripts/skill_container.py" in isolation_options["singularity"]["command"]
-    assert "--image docker://python:3.12-slim" in isolation_options["singularity"]["command"]
-    assert "--require-command python3" in isolation_options["singularity"]["command"]
-    assert "/mnt/skills/scripts/plan_monata_env.py" in isolation_options["singularity"]["command"]
-    assert "/mnt/skills/plugins/monata-env" not in isolation_options["singularity"]["command"]
+    isolation_command = isolation_options["singularity"]["command"]
+    assert "scripts/skill_container.py" in isolation_command
+    assert f"--repo-root {REPO_ROOT}" in isolation_command
+    assert "--image docker://python:3.12-slim" in isolation_command
+    assert "--require-command python3" in isolation_command
+    assert "--session-dir /tmp/skill-home/monata-env-session" in isolation_command
+    assert "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py" in isolation_command
+    assert "--conda-build-helper /mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py" in isolation_command
     assert decisions["upstream_test_profile"]["default"] == "skip"
 
 

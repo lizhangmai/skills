@@ -133,6 +133,19 @@ directory.
      --format json
    ```
 
+   For live validation that should inspect the final package channel without
+   overwriting the final install manifest, keep `--output-dir` pointed at the
+   package channel and send transient logs/manifests to `--session-dir`:
+
+   ```bash
+   python scripts/plan_monata_env.py \
+     --root "<project-workspace>" \
+     --output-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --session-dir /tmp/monata-env-session \
+     --write-manifest \
+     --format json
+   ```
+
    Review `plan.decisions` with the user when there is meaningful choice:
    source policy, pixi global writes, test isolation, and upstream test
    profile. Treat `plan.runbook` as the authoritative execution sequence. Each
@@ -147,6 +160,12 @@ directory.
    Check `plan.helper.conda_build_script`: when it exists, the generated
    check/build commands already point at that helper path; when it is missing,
    resolve the helper checkout before executing check/build steps.
+   For isolated live validation from this repository, the generated
+   `test_isolation` command binds the full skills repo with `--repo-root` and
+   passes `--conda-build-helper /mnt/skills/plugins/conda-build/...` into the
+   container planner. This lets the container execute the planner and
+   `check_channel` runbook step without cloning the helper or touching the
+   user's host caches.
 
    Prefer the executor for runbook steps instead of manually retyping commands:
 
@@ -433,7 +452,7 @@ python scripts/skill_container.py \
   --require-command python3 \
   --dry-run \
   -- \
-  bash -lc 'cd /mnt/project && python3 /mnt/skills/scripts/plan_monata_env.py --root /mnt/project --output-dir /tmp/skill-channel --write-manifest --format json'
+  bash -lc 'cd /mnt/project && python3 /mnt/skills/scripts/plan_monata_env.py --root /mnt/project --output-dir /tmp/skill-channel --session-dir /tmp/skill-home/monata-env-session --write-manifest --format json'
 ```
 
 Remove `--dry-run` only when the printed command shows the expected binds and
@@ -465,6 +484,19 @@ CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel
 SINGULARITY_CACHEDIR=<state-dir>/singularity-cache
 SINGULARITY_TMPDIR=<state-dir>/singularity-tmp
 ```
+
+Use live checks in tiers:
+
+- Planner tier: requires `python3`; runs `plan_monata_env.py` in the container
+  and writes the manifest seed.
+- Channel tier: requires `python3` plus the bound `conda-build` helper; runs
+  `execute_monata_env_runbook.py --step check_channel` in the container and
+  records existing local-channel artifacts. Use `--session-dir` under
+  `/tmp/skill-home` so this does not overwrite the final install manifest in
+  the package channel.
+- Install/smoke tier: requires a container image with `pixi` and enough runtime
+  libraries for the tools. Keep this tier separate from planner/channel checks
+  until the selected image passes `--require-command pixi`.
 
 ## Feedback Protocol
 

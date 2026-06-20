@@ -181,6 +181,42 @@ def output_text(item):
     return "\n".join(chunks).lower()
 
 
+def output_json_payload(item):
+    texts = []
+    if item.get("stdout"):
+        texts.append(item["stdout"])
+    stdout_path = item.get("stdout_path")
+    if stdout_path:
+        path = Path(stdout_path)
+        if path.exists():
+            texts.append(path.read_text(encoding="utf-8", errors="replace"))
+    for text in texts:
+        text = text.strip()
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return None
+
+
+def payload_next_actions(item):
+    payload = output_json_payload(item)
+    if not payload:
+        return []
+    actions = payload.get("next_actions")
+    if not isinstance(actions, list):
+        return []
+    return [
+        action
+        for action in actions
+        if isinstance(action, dict) and action.get("id")
+    ]
+
+
 def upstream_rerun_command(step, timeout):
     command = [str(part) for part in step.get("original_command") or step.get("command") or []]
     if not command:
@@ -204,7 +240,7 @@ def next_actions_for_failure(step, item):
 
     text = output_text(item)
     step_id = step.get("id", "")
-    actions = []
+    actions = payload_next_actions(item)
     if step_id == "upstream_installed_tests" and "xschem-full-regression" in text and "timed out after" in text:
         rerun_command = upstream_rerun_command(step, 900)
         actions.extend(

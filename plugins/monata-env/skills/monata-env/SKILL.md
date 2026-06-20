@@ -308,6 +308,9 @@ directory.
    whether the environment is ready, blocked, or needs additional user choices.
    Use `verification.audit` and the audit `next_actions` as the final
    completion gate before telling the user the setup is done.
+   `scripts/execute_monata_env_runbook.py` preserves `next_actions` emitted in
+   JSON stdout, so audit-specific repair suggestions should appear directly in
+   the executor summary.
 
 5. Detect the required circuit-tool packages from the Monata workspace when you
    need a shell list outside the planner:

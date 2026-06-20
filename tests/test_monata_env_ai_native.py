@@ -1725,6 +1725,54 @@ def test_execute_runbook_suggests_tool_inspection_for_smoke_failure(tmp_path):
     assert "smoke_monata_env_tools.py" in action["command"]
 
 
+def test_execute_runbook_preserves_json_next_actions_from_audit_failure(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    audit_json = tmp_path / "audit.json"
+    audit_payload = {
+        "ok": False,
+        "status": "blocked",
+        "next_actions": [
+            {
+                "id": "repair-live-monata-env",
+                "title": "Repair the current pixi global monata-env state",
+                "requires_user_input": True,
+                "command": "pixi global list --json",
+                "prompt": "Audit found a live monata-env mismatch.",
+            }
+        ],
+    }
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "audit",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            f"import json, sys; print(json.dumps({audit_payload!r})); sys.exit(1)",
+                        ],
+                        "stdout_path": str(audit_json),
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    assert summary["steps"][0]["next_actions"][0]["id"] == "repair-live-monata-env"
+    assert summary["steps"][0]["next_actions"][0]["prompt"] == "Audit found a live monata-env mismatch."
+    assert summary["steps"][0]["stdout_path"] == str(audit_json.resolve())
+    assert summary["next_actions"][0]["id"] == "repair-live-monata-env"
+
+
 def test_execute_runbook_suggests_upstream_test_dependency_for_tclsh_missing(tmp_path):
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(

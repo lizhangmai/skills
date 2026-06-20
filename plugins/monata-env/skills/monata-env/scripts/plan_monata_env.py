@@ -311,6 +311,7 @@ def audit_command(manifest_path):
         str(SCRIPT_DIR / "audit_monata_env_manifest.py"),
         "--manifest",
         str(manifest_path),
+        "--check-live",
         "--format",
         "json",
     ]

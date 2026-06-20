@@ -190,6 +190,12 @@ def write_source_archive(path: Path, top_dir: str = "source") -> None:
         archive.add(source_root, arcname=top_dir)
 
 
+def write_executable(path: Path, text: str = "#!/usr/bin/env sh\nexit 0\n") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    path.chmod(0o755)
+
+
 def test_plan_reports_ref_mismatch_and_recommended_commands(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"
@@ -677,6 +683,7 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
     assert audit_step["stdout_path"] == str(audit_json)
     assert audit_step["stderr_path"] == str(audit_stderr)
     assert "audit_monata_env_manifest.py" in " ".join(audit_step["command"])
+    assert "--check-live" in audit_step["command"]
     assert f"--manifest {output_dir.resolve() / 'monata-env-install-manifest.json'}" in " ".join(
         audit_step["command"]
     )
@@ -2032,6 +2039,80 @@ def test_audit_manifest_blocks_monata_package_or_techlib_bootstrap(tmp_path):
     assert "monata" in requirements["no-monata-or-techlibs"]["problems"]
     action_ids = [item["id"] for item in data["next_actions"]]
     assert action_ids[0] == "remove-monata-techlib-bootstrap"
+
+
+def test_audit_live_state_reports_ready_when_pixi_env_matches_manifest(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    bin_dir = tmp_path / "bin"
+    tools = ["ngspice", "openvaf-r", "klayout", "xschem"]
+    write_auditable_manifest(manifest)
+    for tool in tools:
+        write_executable(bin_dir / tool)
+    pixi_payload = [
+        {
+            "name": "monata-env",
+            "dependencies": [{"name": tool, "version": "1.0"} for tool in tools],
+            "exposed": [{"exposed_name": tool, "executable": tool} for tool in tools],
+        }
+    ]
+    write_executable(
+        bin_dir / "pixi",
+        f"#!{sys.executable}\n"
+        "import json\n"
+        f"print(json.dumps({pixi_payload!r}))\n",
+    )
+    env = {**os.environ, "PATH": str(bin_dir)}
+
+    result = run([sys.executable, AUDIT_SCRIPT, "--manifest", manifest, "--check-live", "--format", "json"], env=env)
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    requirements = {item["id"]: item for item in data["requirements"]}
+    assert data["ok"] is True
+    assert data["status"] == "ready"
+    assert data["summary"]["live_state"] == "matched"
+    assert requirements["live-monata-env"]["ok"] is True
+    assert requirements["live-monata-env"]["packages"] == tools
+    assert requirements["live-monata-env"]["exposed"] == tools
+    assert set(requirements["live-monata-env"]["command_paths"]) == set(tools)
+
+
+def test_audit_live_state_blocks_missing_exposed_command_or_monata_package(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    bin_dir = tmp_path / "bin"
+    tools = ["ngspice", "openvaf-r", "klayout", "xschem"]
+    write_auditable_manifest(manifest)
+    for tool in tools[:-1]:
+        write_executable(bin_dir / tool)
+    pixi_payload = [
+        {
+            "name": "monata-env",
+            "dependencies": [{"name": tool, "version": "1.0"} for tool in [*tools, "monata"]],
+            "exposed": [{"exposed_name": tool, "executable": tool} for tool in tools[:-1]],
+        }
+    ]
+    write_executable(
+        bin_dir / "pixi",
+        f"#!{sys.executable}\n"
+        "import json\n"
+        f"print(json.dumps({pixi_payload!r}))\n",
+    )
+    env = {**os.environ, "PATH": str(bin_dir)}
+
+    result = run([sys.executable, AUDIT_SCRIPT, "--manifest", manifest, "--check-live", "--format", "json"], env=env)
+
+    assert result.returncode == 1, result.stdout
+    data = json.loads(result.stdout)
+    requirements = {item["id"]: item for item in data["requirements"]}
+    assert data["ok"] is False
+    assert data["status"] == "blocked"
+    assert data["summary"]["live_state"] == "mismatch"
+    live = requirements["live-monata-env"]
+    assert live["ok"] is False
+    assert live["missing_commands"] == ["xschem"]
+    assert live["missing_exposures"] == ["xschem"]
+    assert live["forbidden_packages"] == ["monata"]
+    assert data["next_actions"][0]["id"] == "repair-live-monata-env"
 
 
 def test_rattler_local_source_ref_rejects_mismatched_checkout(tmp_path):

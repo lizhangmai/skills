@@ -3,7 +3,9 @@
 
 import argparse
 import json
+import shutil
 import shlex
+import subprocess
 from pathlib import Path
 
 
@@ -15,6 +17,7 @@ FORBIDDEN_COMMAND_SNIPPETS = [
     "bootstrap_monata_techlibs.py",
     "TechlibRegistry",
 ]
+FORBIDDEN_PACKAGES = ["monata"]
 
 
 def load_json(path):
@@ -219,9 +222,119 @@ def upstream_recommendation(manifest):
     }
 
 
+def normalize_items(items, key):
+    values = []
+    seen = set()
+    for item in items or []:
+        if isinstance(item, dict):
+            value = item.get(key) or item.get("name")
+        else:
+            value = item
+        if value and str(value) not in seen:
+            values.append(str(value))
+            seen.add(str(value))
+    return values
+
+
+def pixi_global_env(env_name):
+    pixi = shutil.which("pixi")
+    if pixi is None:
+        return None, {
+            "returncode": None,
+            "reason": "pixi-missing",
+            "output": "",
+        }
+    result = subprocess.run(
+        [pixi, "global", "list", "--json"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None, {
+            "returncode": result.returncode,
+            "reason": "pixi-global-list-failed",
+            "output": result.stdout[-4000:],
+        }
+    try:
+        environments = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return None, {
+            "returncode": result.returncode,
+            "reason": "pixi-global-list-invalid-json",
+            "output": result.stdout[-4000:],
+            "error": str(exc),
+        }
+    if isinstance(environments, dict):
+        environments = environments.get("environments") or environments.get("envs") or []
+    for item in environments:
+        if isinstance(item, dict) and item.get("name") == env_name:
+            return item, {
+                "returncode": result.returncode,
+                "reason": "ok",
+                "output": "",
+            }
+    return None, {
+        "returncode": result.returncode,
+        "reason": "pixi-env-missing",
+        "output": result.stdout[-4000:],
+    }
+
+
+def live_state_requirement(manifest):
+    plan = manifest.get("plan", {})
+    env_name = plan.get("env_name") or "monata-env"
+    expected_tools = list(EXPECTED_TOOLS)
+    command_paths = {tool: shutil.which(tool) or "" for tool in expected_tools}
+    missing_commands = [tool for tool, path in command_paths.items() if not path]
+    env, pixi_status = pixi_global_env(env_name)
+    packages = []
+    exposed = []
+    if env:
+        packages = normalize_items(env.get("dependencies"), "name")
+        exposed = normalize_items(env.get("exposed"), "exposed_name")
+    missing_packages = [tool for tool in expected_tools if tool not in packages]
+    missing_exposures = [tool for tool in expected_tools if tool not in exposed]
+    forbidden_packages = [package for package in FORBIDDEN_PACKAGES if package in packages]
+    ok = (
+        pixi_status["reason"] == "ok"
+        and not missing_commands
+        and not missing_packages
+        and not missing_exposures
+        and not forbidden_packages
+    )
+    return requirement(
+        "live-monata-env",
+        "Current pixi global monata-env state matches the manifest requirements",
+        ok,
+        "ok" if ok else "live-state-mismatch",
+        env_name=env_name,
+        pixi_status=pixi_status,
+        packages=packages,
+        exposed=exposed,
+        command_paths={tool: path for tool, path in command_paths.items() if path},
+        missing_commands=missing_commands,
+        missing_packages=missing_packages,
+        missing_exposures=missing_exposures,
+        forbidden_packages=forbidden_packages,
+    )
+
+
 def next_actions(requirements, recommendation):
     actions = []
     by_id = {item["id"]: item for item in requirements}
+    live = by_id.get("live-monata-env")
+    if live and not live["ok"]:
+        actions.append(
+            {
+                "id": "repair-live-monata-env",
+                "title": "Repair the current pixi global monata-env state",
+                "requires_user_input": True,
+                "command": "pixi global list --json",
+                "prompt": "The current pixi global monata-env state does not match the manifest. Inspect the live package/exposure mismatch, then rerun the install and smoke/audit runbook steps in an isolated or approved environment.",
+            }
+        )
     if not by_id["no-monata-or-techlibs"]["ok"]:
         actions.append(
             {
@@ -271,7 +384,7 @@ def next_actions(requirements, recommendation):
     return actions
 
 
-def audit(manifest_path):
+def audit(manifest_path, check_live=False):
     manifest = load_json(manifest_path)
     requirements = [
         expected_tool_plan(manifest),
@@ -279,10 +392,13 @@ def audit(manifest_path):
         install_succeeded(manifest),
         smoke_passed(manifest),
     ]
+    if check_live:
+        requirements.append(live_state_requirement(manifest))
     recommendation = upstream_recommendation(manifest)
     ok = all(item["ok"] for item in requirements)
     actions = next_actions(requirements, recommendation)
     status = "ready" if ok else "blocked"
+    live = next((item for item in requirements if item["id"] == "live-monata-env"), None)
     return {
         "ok": ok,
         "status": status,
@@ -292,6 +408,7 @@ def audit(manifest_path):
             "required_tools": EXPECTED_TOOLS,
             "install_ok": requirements[2]["ok"],
             "smoke_ok": requirements[3]["ok"],
+            "live_state": "matched" if live and live["ok"] else "mismatch" if live else "not-checked",
             "upstream_installed": recommendation["status"],
         },
         "requirements": requirements,
@@ -310,13 +427,18 @@ def print_summary(report):
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True, help="monata-env install manifest to audit.")
+    parser.add_argument(
+        "--check-live",
+        action="store_true",
+        help="Also inspect current PATH shims and pixi global list --json for the target environment.",
+    )
     parser.add_argument("--format", choices=("json", "summary"), default="summary")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    report = audit(args.manifest.expanduser().resolve())
+    report = audit(args.manifest.expanduser().resolve(), check_live=args.check_live)
     if args.format == "json":
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

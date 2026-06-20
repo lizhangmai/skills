@@ -20,6 +20,8 @@
       "scripts/execute_monata_env_runbook.py",
       "scripts/prepare_monata_env_test_image.py",
       "scripts/audit_monata_env_manifest.py",
+      "--check-live",
+      "pixi global list --json",
       "--write-manifest",
       "--host-pixi-root",
       "--container-state-dir",

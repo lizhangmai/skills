@@ -303,7 +303,8 @@ directory.
    the required tag, or inspecting missing exposed tool commands after smoke
    failure.
    The final `audit` runbook step calls
-   `scripts/audit_monata_env_manifest.py`; it reads the manifest and reports
+   `scripts/audit_monata_env_manifest.py --check-live`; it reads the manifest,
+   checks current PATH shims plus `pixi global list --json`, and reports
    whether the environment is ready, blocked, or needs additional user choices.
    Use `verification.audit` and the audit `next_actions` as the final
    completion gate before telling the user the setup is done.
@@ -550,6 +551,7 @@ directory.
    AUDIT_ERR="$CONDA_BUILD_OUTPUT_DIR/monata-env-audit.err"
    if python scripts/audit_monata_env_manifest.py \
        --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+       --check-live \
        --format json > "$AUDIT_JSON" 2> "$AUDIT_ERR"; then
      AUDIT_RC=0
    else
@@ -558,7 +560,7 @@ directory.
    python scripts/record_monata_env_session.py \
      --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
      --command-kind audit \
-     --command "python scripts/audit_monata_env_manifest.py --manifest ... --format json" \
+     --command "python scripts/audit_monata_env_manifest.py --manifest ... --check-live --format json" \
      --returncode "$AUDIT_RC" \
      --stdout-file "$AUDIT_JSON" \
      --stderr-file "$AUDIT_ERR" \

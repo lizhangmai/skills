@@ -36,6 +36,8 @@
       "artifacts already present",
       "record_monata_env_session.py",
       "audit_monata_env_manifest.py",
+      "--check-live",
+      "pixi global list --json",
       "smoke_monata_env_tools.py",
       "verification.smoke",
       "verification.audit",

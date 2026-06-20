@@ -825,6 +825,11 @@ def questions(local_sources):
                     for package, item in ref_mismatches.items()
                     if item.get("recommended_worktree")
                 },
+                "replan_local_sources": [
+                    f"{package}={item['recommended_worktree']}"
+                    for package, item in ref_mismatches.items()
+                    if item.get("recommended_worktree")
+                ],
                 "worktree_commands": {
                     package: item["worktree_command"]
                     for package, item in ref_mismatches.items()

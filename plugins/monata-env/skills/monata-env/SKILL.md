@@ -254,8 +254,9 @@ directory.
    recommended fallback such as creating temporary detached worktrees,
    installing missing host tools, or writing to the pixi global environment.
    For `local_source_worktree`, prefer the planner-provided
-   `worktree_commands` and `recommended_sources` fields instead of manually
-   reconstructing git commands.
+   `worktree_commands`, `recommended_sources`, and `replan_local_sources`
+   fields instead of manually reconstructing git commands or replacement
+   `--local-source` arguments.
    For `local_source_repair`, use `problem_sources` to name the exact package,
    path, status, and target ref that needs a corrected checkout, tag, archive,
    or validation-capable container.

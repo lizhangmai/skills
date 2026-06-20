@@ -364,6 +364,61 @@ def test_plan_can_select_full_upstream_installed_profile(tmp_path):
     assert "--step install --step smoke --step upstream_installed_tests" in upstream
 
 
+def test_plan_threads_custom_env_name_into_upstream_and_container_commands(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    image = tmp_path / "monata-env-python.sif"
+    host_pixi_root = tmp_path / "host-pixi"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    image.write_text("sif", encoding="utf-8")
+    (host_pixi_root / "bin").mkdir(parents=True)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            "--container-image",
+            image,
+            "--host-pixi-root",
+            host_pixi_root,
+            "--env-name",
+            "custom-monata-env",
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--local-source",
+            f"xschem={xschem_source}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["env_name"] == "custom-monata-env"
+    assert "--environment custom-monata-env" in " ".join(data["commands"]["install"])
+    assert "--env-name custom-monata-env" in " ".join(data["commands"]["upstream_installed_tests"])
+
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    assert "custom-monata-env" in decisions["global_environment"]["prompt"]
+    global_options = {option["id"]: option for option in decisions["global_environment"]["options"]}
+    assert global_options["approve"]["label"] == "Update custom-monata-env"
+    singularity = {option["id"]: option for option in decisions["test_isolation"]["options"]}["singularity"]
+    assert "--env-name custom-monata-env" in singularity["command"]
+    assert "--env-name custom-monata-env" in singularity["commands"]["install_smoke"]
+    assert "--env-name custom-monata-env" in singularity["commands"]["install_smoke_upstream"]
+
+
 def test_plan_uses_available_conda_build_helper_path(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"

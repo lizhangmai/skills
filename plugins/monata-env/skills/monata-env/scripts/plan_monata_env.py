@@ -254,12 +254,14 @@ def check_channel_command(packages, output_dir, helper_script):
     return command
 
 
-def upstream_installed_test_command(local_sources, upstream_profile):
+def upstream_installed_test_command(local_sources, upstream_profile, env_name):
     command = [
         sys.executable,
         str(SCRIPT_DIR / "test_monata_env_upstream.py"),
         "--format",
         "json",
+        "--env-name",
+        env_name,
         "--profile",
         upstream_profile,
     ]
@@ -468,7 +470,7 @@ def container_runner_prefix(root, output_dir, container_image, helper_script, st
     )
 
 
-def container_planner_command(root, output_dir, container_image, helper_script, state_dir):
+def container_planner_command(root, output_dir, container_image, helper_script, state_dir, env_name):
     skills_repo_root = find_skills_repo_root(helper_script)
     container_plan_script = "/mnt/skills/scripts/plan_monata_env.py"
     container_helper_arg = ""
@@ -484,7 +486,8 @@ def container_planner_command(root, output_dir, container_image, helper_script, 
         "--dry-run -- "
         f"bash -lc 'cd /mnt/project && python3 {container_plan_script} "
         f"--root /mnt/project --output-dir /tmp/skill-channel "
-        f"--session-dir /tmp/skill-home/monata-env-session{container_helper_arg} "
+        f"--session-dir /tmp/skill-home/monata-env-session "
+        f"--env-name {shlex.quote(env_name)}{container_helper_arg} "
         "--write-manifest --format json'"
     )
 
@@ -529,6 +532,7 @@ def container_install_smoke_command(
     helper_script,
     host_pixi_root,
     state_dir,
+    env_name="monata-env",
     local_source_paths=None,
     include_upstream=False,
     upstream_profile="basic",
@@ -584,7 +588,8 @@ def container_install_smoke_command(
         "mkdir -p /tmp/skill-home/monata-env-session && "
         f"{container_python} {plan_script} "
         "--root /mnt/project --output-dir /tmp/skill-channel "
-        f"--session-dir /tmp/skill-home/monata-env-session{container_helper_arg} "
+        f"--session-dir /tmp/skill-home/monata-env-session "
+        f"--env-name {shlex.quote(env_name)}{container_helper_arg} "
         f"{''.join(source_options)}"
         "--write-manifest --format json "
         "> /tmp/skill-home/monata-env-session/plan.json && "
@@ -604,6 +609,7 @@ def decisions(
     helper_script,
     container_state_dir,
     test_image,
+    env_name,
     upstream_profile,
     host_pixi_root=None,
 ):
@@ -616,7 +622,14 @@ def decisions(
         source_default = "local_sources"
     else:
         source_default = "network"
-    isolation_command = container_planner_command(root, output_dir, container_image, helper_script, container_state_dir)
+    isolation_command = container_planner_command(
+        root,
+        output_dir,
+        container_image,
+        helper_script,
+        container_state_dir,
+        env_name,
+    )
     isolated_commands = {"planner": isolation_command}
     live_install_command = container_install_smoke_command(
         root,
@@ -625,6 +638,7 @@ def decisions(
         helper_script,
         host_pixi_root,
         container_state_dir,
+        env_name=env_name,
     )
     if live_install_command:
         isolated_commands["install_smoke"] = live_install_command
@@ -635,6 +649,7 @@ def decisions(
         helper_script,
         host_pixi_root,
         container_state_dir,
+        env_name=env_name,
         local_source_paths=local_source_paths,
         include_upstream=bool(local_source_paths),
         upstream_profile=upstream_profile,
@@ -644,14 +659,14 @@ def decisions(
     return [
         {
             "id": "global_environment",
-            "prompt": "Create or update the pixi global monata-env environment and exposed command shims?",
+            "prompt": f"Create or update the pixi global {env_name} environment and exposed command shims?",
             "default": "approve",
             "options": [
                 {
                     "id": "approve",
-                    "label": "Update monata-env",
+                    "label": f"Update {env_name}",
                     "recommended": True,
-                    "effect": "Runs pixi global install only for the monata-env environment.",
+                    "effect": f"Runs pixi global install only for the {env_name} environment.",
                 },
                 {
                     "id": "plan_only",
@@ -872,7 +887,7 @@ def create_plan(
         "build": build_command(build_packages, output_dir, selected_local_sources, helper_script) if build_packages else [],
         "install": install_command(packages, output_dir, env_name),
         "smoke": [sys.executable, str(SCRIPT_DIR / "smoke_monata_env_tools.py"), "--format", "json"],
-        "upstream_installed_tests": upstream_installed_test_command(local_source_paths, upstream_profile),
+        "upstream_installed_tests": upstream_installed_test_command(local_source_paths, upstream_profile, env_name),
     }
     profiles = test_profiles(local_source_paths)
     test_image = test_image_plan(
@@ -907,6 +922,7 @@ def create_plan(
                 helper_script,
                 resolved_host_pixi_root,
                 resolved_container_state_dir,
+                env_name=env_name,
             ),
             "live_install_smoke_upstream_command": container_install_smoke_command(
                 root,
@@ -915,6 +931,7 @@ def create_plan(
                 helper_script,
                 resolved_host_pixi_root,
                 resolved_container_state_dir,
+                env_name=env_name,
                 local_source_paths=local_source_paths,
                 include_upstream=bool(local_source_paths),
                 upstream_profile=upstream_profile,
@@ -937,6 +954,7 @@ def create_plan(
             helper_script,
             resolved_container_state_dir,
             test_image,
+            env_name,
             upstream_profile,
             resolved_host_pixi_root,
         ),

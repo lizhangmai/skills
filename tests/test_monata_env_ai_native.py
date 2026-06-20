@@ -398,6 +398,7 @@ def test_plan_decisions_offer_network_source_and_isolated_testing_defaults(tmp_p
     isolation_options = {option["id"]: option for option in decisions["test_isolation"]["options"]}
     assert isolation_options["singularity"]["recommended"] is True
     assert "scripts/skill_container.py" in isolation_options["singularity"]["command"]
+    assert "--require-command python3" in isolation_options["singularity"]["command"]
     assert "/mnt/skills/scripts/plan_monata_env.py" in isolation_options["singularity"]["command"]
     assert "/mnt/skills/plugins/monata-env" not in isolation_options["singularity"]["command"]
     assert decisions["upstream_test_profile"]["default"] == "skip"

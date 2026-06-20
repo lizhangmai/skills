@@ -416,13 +416,21 @@ Use the skill-local container wrapper for live setup checks:
 python scripts/skill_container.py \
   --state-dir /tmp/monata-env-skill-test \
   --workspace "<project-workspace>" \
+  --require-command python3 \
   --dry-run \
   -- \
   bash -lc 'cd /mnt/project && python3 /mnt/skills/scripts/plan_monata_env.py --root /mnt/project --output-dir /tmp/skill-channel --write-manifest --format json'
 ```
 
 Remove `--dry-run` only when the printed command shows the expected binds and
-temporary state directories. For live install/smoke checks, keep
+temporary state directories. Add one `--require-command` per tool that must
+exist inside the container before the command starts. If the container is
+missing one, the wrapper returns `missing-required-commands` JSON instead of a
+bare shell failure and recommends `choose-container-with-required-commands`.
+If pulling or resolving `docker://...` fails because of network or registry
+access, read `next_actions`; the wrapper can recommend
+`use-local-container-image` so the user can provide a local `.sif` image or a
+reachable mirror. For live install/smoke checks, keep
 `CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel`; pixi global state is isolated by
 `PIXI_HOME=/tmp/skill-home/.pixi`. The wrapper also sets host-side
 `SINGULARITY_CACHEDIR` and `SINGULARITY_TMPDIR` under the selected state

@@ -398,6 +398,7 @@ def decisions(root, output_dir, local_source_paths, profiles, build_needed):
         "--state-dir /tmp/monata-env-skill-test "
         f"--workspace {shlex.quote(str(Path(root).resolve()))} "
         f"--channel {shlex.quote(str(output_dir))} "
+        "--require-command python3 "
         "--dry-run -- "
         "bash -lc 'cd /mnt/project && python3 "
         "/mnt/skills/scripts/plan_monata_env.py "

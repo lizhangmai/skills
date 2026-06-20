@@ -14,6 +14,7 @@
       "scripts/skill_container.py",
       "PIXI_HOME=/tmp/skill-home/.pixi",
       "CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel",
+      "SINGULARITY_CACHEDIR",
       "test -d /mnt/skills"
     ]
   }

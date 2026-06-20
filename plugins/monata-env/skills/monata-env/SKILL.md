@@ -359,7 +359,10 @@ python scripts/skill_container.py \
 Remove `--dry-run` only when the printed command shows the expected binds and
 temporary state directories. For live install/smoke checks, keep
 `CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel`; pixi global state is isolated by
-`PIXI_HOME=/tmp/skill-home/.pixi`.
+`PIXI_HOME=/tmp/skill-home/.pixi`. The wrapper also sets host-side
+`SINGULARITY_CACHEDIR` and `SINGULARITY_TMPDIR` under the selected state
+directory so pulling a container image does not use the user's default
+Singularity cache.
 
 The expected isolation variables are:
 
@@ -369,6 +372,8 @@ PIXI_HOME=/tmp/skill-home/.pixi
 XDG_CACHE_HOME=/tmp/skill-home/.cache
 RATTLER_CACHE_DIR=/tmp/skill-home/.cache/rattler
 CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel
+SINGULARITY_CACHEDIR=<state-dir>/singularity-cache
+SINGULARITY_TMPDIR=<state-dir>/singularity-tmp
 ```
 
 ## Feedback Protocol

@@ -207,7 +207,9 @@ python scripts/skill_container.py \
 The wrapper binds this repository to `/mnt/skills`, the workspace to
 `/mnt/project`, and a disposable channel to `/tmp/skill-channel`, while setting
 `HOME`, `PIXI_HOME`, `XDG_CACHE_HOME`, and `RATTLER_CACHE_DIR` under
-`/tmp/skill-home`.
+`/tmp/skill-home`. It also sets host-side `SINGULARITY_CACHEDIR` and
+`SINGULARITY_TMPDIR` under the selected state directory, so pulling or running
+the image does not use the user's default Singularity cache.
 
 ## Publishing Boundary
 

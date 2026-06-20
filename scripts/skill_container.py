@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -23,13 +24,24 @@ def prepare_dirs(state_dir, channel_dir):
     home = state / "home"
     cache = home / ".cache"
     channel = resolve_path(channel_dir) if channel_dir else state / "channel"
-    for path in (home, cache, cache / "rattler", channel):
+    singularity_cache = state / "singularity-cache"
+    singularity_tmp = state / "singularity-tmp"
+    for path in (home, cache, cache / "rattler", channel, singularity_cache, singularity_tmp):
         path.mkdir(parents=True, exist_ok=True)
     return {
         "state_dir": state,
         "home_dir": home,
         "cache_dir": cache,
         "channel_dir": channel,
+        "singularity_cache_dir": singularity_cache,
+        "singularity_tmp_dir": singularity_tmp,
+    }
+
+
+def host_env(dirs):
+    return {
+        "SINGULARITY_CACHEDIR": str(dirs["singularity_cache_dir"]),
+        "SINGULARITY_TMPDIR": str(dirs["singularity_tmp_dir"]),
     }
 
 
@@ -89,6 +101,7 @@ def main():
         "home_dir": str(dirs["home_dir"]),
         "cache_dir": str(dirs["cache_dir"]),
         "channel_dir": str(dirs["channel_dir"]),
+        "host_env": host_env(dirs),
         "repo_root": str(resolve_path(args.repo_root)),
         "workspace": str(resolve_path(args.workspace)),
         "image": str(args.image),
@@ -103,7 +116,9 @@ def main():
         print(f"ERROR: Singularity executable not found: {singularity_bin}", file=sys.stderr)
         return 2
 
-    result = subprocess.run(command, check=False)
+    env = os.environ.copy()
+    env.update(host_env(dirs))
+    result = subprocess.run(command, env=env, check=False)
     return result.returncode
 
 

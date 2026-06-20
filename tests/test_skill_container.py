@@ -94,3 +94,30 @@ def test_skill_container_dry_run_creates_isolated_state_dirs(tmp_path):
     assert (state_dir / "home").is_dir()
     assert (state_dir / "home" / ".cache").is_dir()
     assert (state_dir / "channel").is_dir()
+
+
+def test_skill_container_dry_run_isolates_singularity_host_cache(tmp_path):
+    workspace = tmp_path / "workspace"
+    state_dir = tmp_path / "state"
+    workspace.mkdir()
+
+    result = run(
+        [
+            sys.executable,
+            SCRIPT,
+            "--dry-run",
+            "--state-dir",
+            state_dir,
+            "--workspace",
+            workspace,
+            "--",
+            "true",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["host_env"]["SINGULARITY_CACHEDIR"] == str((state_dir / "singularity-cache").resolve())
+    assert data["host_env"]["SINGULARITY_TMPDIR"] == str((state_dir / "singularity-tmp").resolve())
+    assert (state_dir / "singularity-cache").is_dir()
+    assert (state_dir / "singularity-tmp").is_dir()

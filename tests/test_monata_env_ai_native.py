@@ -147,6 +147,8 @@ def test_plan_reports_ref_mismatch_and_recommended_commands(tmp_path):
     assert data["local_sources"]["klayout"]["status"] == "ref-mismatch"
     assert data["local_sources"]["klayout"]["target_ref"] == "v0.30.9"
     assert data["questions"][0]["id"] == "local_source_worktree"
+    assert data["questions"][0]["worktree_commands"]["klayout"] == data["local_sources"]["klayout"]["worktree_command"]
+    assert data["questions"][0]["recommended_sources"]["klayout"] == data["local_sources"]["klayout"]["recommended_worktree"]
     build_command = " ".join(data["commands"]["build"])
     assert "--local-source" in build_command
     assert "klayout=" in build_command

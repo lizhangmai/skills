@@ -809,12 +809,27 @@ def test_profiles(local_sources):
 
 def questions(local_sources):
     items = []
-    if any(item["status"] == "ref-mismatch" for item in local_sources.values()):
+    ref_mismatches = {
+        package: item
+        for package, item in local_sources.items()
+        if item["status"] == "ref-mismatch"
+    }
+    if ref_mismatches:
         items.append(
             {
                 "id": "local_source_worktree",
                 "question": "Local source checkout is not at the recipe ref. Create a temporary detached worktree instead of changing the user's checkout?",
                 "recommended": True,
+                "recommended_sources": {
+                    package: item["recommended_worktree"]
+                    for package, item in ref_mismatches.items()
+                    if item.get("recommended_worktree")
+                },
+                "worktree_commands": {
+                    package: item["worktree_command"]
+                    for package, item in ref_mismatches.items()
+                    if item.get("worktree_command")
+                },
             }
         )
     if any(

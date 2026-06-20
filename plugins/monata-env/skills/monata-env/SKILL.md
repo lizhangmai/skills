@@ -253,6 +253,9 @@ directory.
    Review the plan's `questions`. Ask the user before doing a
    recommended fallback such as creating temporary detached worktrees,
    installing missing host tools, or writing to the pixi global environment.
+   For `local_source_worktree`, prefer the planner-provided
+   `worktree_commands` and `recommended_sources` fields instead of manually
+   reconstructing git commands.
    Check `plan.helper.conda_build_script`: when it exists, the generated
    check/build commands already point at that helper path; when it is missing,
    resolve the helper checkout before executing check/build steps.

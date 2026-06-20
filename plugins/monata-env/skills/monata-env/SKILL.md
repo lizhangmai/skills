@@ -230,13 +230,15 @@ directory.
 
    That generated command first runs the planner inside the container with
    `--write-manifest`, stores the planner JSON under
-   `/tmp/skill-home/monata-env-session`, and then executes only the
-   `install` and `smoke` runbook steps against that isolated manifest.
+   `/tmp/skill-home/monata-env-session`, and then executes `check_channel`,
+   `install`, `smoke`, and final `audit` runbook steps against that isolated
+   manifest.
    When local KLayout/Xschem sources are also provided, the planner additionally
    emits `commands.install_smoke_upstream`; that command binds each source
    read-only under `/mnt/sources/<package>`, regenerates the manifest with
-   container-local `--local-source` paths, and runs `install`, `smoke`, and
-   `upstream_installed_tests` with the requested upstream profile.
+   container-local `--local-source` paths, and runs `check_channel`,
+   `install`, `smoke`, `upstream_installed_tests`, and final `audit` with the
+   requested upstream profile.
 
    Review `plan.decisions` with the user when there is meaningful choice:
    source policy, pixi global writes, test isolation, and upstream test
@@ -710,7 +712,7 @@ Use live checks in tiers:
     --require-command /usr/local/bin/python3 \
     --require-command pixi \
     -- \
-    bash -c 'cd /mnt/project && mkdir -p /tmp/skill-home/monata-env-session && /usr/local/bin/python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py --root /mnt/project --output-dir /tmp/skill-channel --session-dir /tmp/skill-home/monata-env-session --conda-build-helper /mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py --write-manifest --format json > /tmp/skill-home/monata-env-session/plan.json && /usr/local/bin/python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/execute_monata_env_runbook.py --manifest /tmp/skill-home/monata-env-session/monata-env-install-manifest.json --step install --step smoke --allow-confirmation-required --format json'
+    bash -c 'cd /mnt/project && mkdir -p /tmp/skill-home/monata-env-session && /usr/local/bin/python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py --root /mnt/project --output-dir /tmp/skill-channel --session-dir /tmp/skill-home/monata-env-session --conda-build-helper /mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py --write-manifest --format json > /tmp/skill-home/monata-env-session/plan.json && /usr/local/bin/python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/execute_monata_env_runbook.py --manifest /tmp/skill-home/monata-env-session/monata-env-install-manifest.json --step check_channel --step install --step smoke --step audit --allow-confirmation-required --format json'
   ```
 
   Use `bash -c`, not `bash -lc`, when relying on a prepended PATH; login shells

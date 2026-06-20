@@ -530,7 +530,7 @@ def test_plan_can_select_full_upstream_installed_profile(tmp_path):
         "install_smoke_upstream"
     ]
     assert "--upstream-profile full" in upstream
-    assert "--step install --step smoke --step upstream_installed_tests" in upstream
+    assert "--step check_channel --step install --step smoke --step upstream_installed_tests --step audit" in upstream
 
 
 def test_plan_threads_custom_env_name_into_upstream_and_container_commands(tmp_path):
@@ -1024,7 +1024,7 @@ def test_plan_decisions_can_emit_isolated_live_install_smoke_command(tmp_path):
     assert "execute_monata_env_runbook.py" in live_install
     assert "/usr/local/bin/python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/execute_monata_env_runbook.py" in live_install
     assert live_install.index("plan_monata_env.py") < live_install.index("execute_monata_env_runbook.py")
-    assert "--step install --step smoke" in live_install
+    assert "--step check_channel --step install --step smoke --step audit" in live_install
     assert "--allow-confirmation-required" in live_install
     assert "/tmp/skill-home/monata-env-session/monata-env-install-manifest.json" in live_install
     assert data["container"]["host_pixi_root"] == str(host_pixi_root.resolve())
@@ -1078,7 +1078,7 @@ def test_plan_decisions_can_emit_isolated_upstream_installed_command(tmp_path):
     assert f"--bind {xschem_source.resolve()}:/mnt/sources/xschem:ro" in upstream
     assert "--local-source klayout=/mnt/sources/klayout" in upstream
     assert "--local-source xschem=/mnt/sources/xschem" in upstream
-    assert "--step install --step smoke --step upstream_installed_tests" in upstream
+    assert "--step check_channel --step install --step smoke --step upstream_installed_tests --step audit" in upstream
     assert data["container"]["live_install_smoke_upstream_command"] == upstream
 
 

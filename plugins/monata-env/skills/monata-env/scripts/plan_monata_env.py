@@ -633,9 +633,10 @@ def container_install_smoke_command(
             source_binds.append(f"--bind {shlex.quote(f'{source_path}:{container_source}:ro')} ")
             source_options.append(f"--local-source {package}={container_source} ")
         source_options.append(f"--upstream-profile {upstream_profile} ")
-    runbook_steps = "--step install --step smoke"
+    runbook_steps = "--step check_channel --step install --step smoke"
     if include_upstream:
         runbook_steps += " --step upstream_installed_tests"
+    runbook_steps += " --step audit"
     return (
         container_runner_prefix(
             root,

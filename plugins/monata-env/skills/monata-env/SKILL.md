@@ -465,6 +465,9 @@ directory.
    pixi global env prefix, then falls back to `PATH`. The executor will suggest
    installing/exposing Tcl, inspecting full-regression timeout output, or
    re-planning with `--upstream-profile basic` when those cases occur.
+   Planner-generated upstream commands use
+   `--work-dir <session-dir>/monata-env-upstream-work --keep-work-dir` so the
+   copied upstream test tree remains available after failures.
 
 12. Prefer `scripts/execute_monata_env_runbook.py` so `runbook[*].record_after`
    runs automatically after build, install, smoke, and upstream test commands.

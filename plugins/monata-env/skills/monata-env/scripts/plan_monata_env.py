@@ -254,7 +254,9 @@ def check_channel_command(packages, output_dir, helper_script):
     return command
 
 
-def upstream_installed_test_command(local_sources, upstream_profile, env_name):
+def upstream_installed_test_command(local_sources, upstream_profile, env_name, work_dir=None):
+    if not any(package in local_sources for package in ("klayout", "xschem")):
+        return []
     command = [
         sys.executable,
         str(SCRIPT_DIR / "test_monata_env_upstream.py"),
@@ -269,7 +271,9 @@ def upstream_installed_test_command(local_sources, upstream_profile, env_name):
         command.extend(["--klayout-source", str(local_sources["klayout"])])
     if "xschem" in local_sources:
         command.extend(["--xschem-source", str(local_sources["xschem"])])
-    return command if len(command) > 6 else []
+    if work_dir:
+        command.extend(["--work-dir", str(work_dir), "--keep-work-dir"])
+    return command
 
 
 def record_after_command(
@@ -882,12 +886,18 @@ def create_plan(
         if resolved_session_dir
         else Path("monata-env-install-manifest.json")
     )
+    upstream_work_dir = resolved_session_dir / "monata-env-upstream-work"
     commands = {
         "check_channel": check_channel_command(packages, output_dir, helper_script),
         "build": build_command(build_packages, output_dir, selected_local_sources, helper_script) if build_packages else [],
         "install": install_command(packages, output_dir, env_name),
         "smoke": [sys.executable, str(SCRIPT_DIR / "smoke_monata_env_tools.py"), "--format", "json"],
-        "upstream_installed_tests": upstream_installed_test_command(local_source_paths, upstream_profile, env_name),
+        "upstream_installed_tests": upstream_installed_test_command(
+            local_source_paths,
+            upstream_profile,
+            env_name,
+            upstream_work_dir,
+        ),
     }
     profiles = test_profiles(local_source_paths)
     test_image = test_image_plan(

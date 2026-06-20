@@ -306,6 +306,43 @@ def test_plan_recommends_upstream_installed_tests_when_sources_are_provided(tmp_
     assert f"--xschem-source {xschem_source.resolve()}" in command
 
 
+def test_plan_keeps_upstream_installed_test_work_dir_under_session_dir(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--local-source",
+            f"xschem={xschem_source}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    command = " ".join(data["commands"]["upstream_installed_tests"])
+    work_dir = session_dir.resolve() / "monata-env-upstream-work"
+    assert f"--work-dir {work_dir}" in command
+    assert "--keep-work-dir" in command
+
+
 def test_plan_can_select_full_upstream_installed_profile(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"
@@ -580,6 +617,9 @@ def test_plan_decisions_offer_network_source_and_isolated_testing_defaults(tmp_p
     source_options = {option["id"]: option for option in decisions["source_policy"]["options"]}
     assert source_options["network"]["recommended"] is True
     assert source_options["local_sources"]["recommended"] is False
+    assert data["commands"]["upstream_installed_tests"] == []
+    runbook = {step["id"]: step for step in data["runbook"]}
+    assert runbook["upstream_installed_tests"]["record_after"] is None
     assert decisions["test_isolation"]["default"] == "singularity"
     isolation_options = {option["id"]: option for option in decisions["test_isolation"]["options"]}
     assert isolation_options["singularity"]["recommended"] is True

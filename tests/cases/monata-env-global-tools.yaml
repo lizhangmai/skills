@@ -40,6 +40,7 @@
       "--format summary",
       "artifact package coverage",
       "next_actions",
+      "KLayout Ruby/RBA and Python",
       "pixi global list --json",
       "smoke_monata_env_tools.py",
       "verification.smoke",

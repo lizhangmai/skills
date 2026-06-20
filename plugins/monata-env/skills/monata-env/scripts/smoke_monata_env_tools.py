@@ -98,24 +98,40 @@ def smoke_openvaf(path, work_dir):
 
 
 def smoke_klayout(path, work_dir):
-    script = work_dir / "klayout-smoke.rb"
-    output = work_dir / "klayout-smoke.gds"
-    script.write_text(
+    ruby_script = work_dir / "klayout-smoke.rb"
+    ruby_output = work_dir / "klayout-smoke.gds"
+    python_script = work_dir / "klayout-python-smoke.py"
+    python_output = work_dir / "klayout-python-smoke.gds"
+    ruby_script.write_text(
         f"""layout = RBA::Layout::new
 cell = layout.create_cell('TOP')
 layer = layout.layer(1, 0)
 cell.shapes(layer).insert(RBA::Box::new(0, 0, 1000, 1000))
-layout.write('{output}')
-puts 'wrote {output}'
+layout.write('{ruby_output}')
+puts 'wrote {ruby_output}'
+""",
+        encoding="utf-8",
+    )
+    python_script.write_text(
+        f"""import klayout.db as db
+layout = db.Layout()
+cell = layout.create_cell('TOP')
+layer = layout.layer(1, 0)
+cell.shapes(layer).insert(db.Box(0, 0, 1000, 1000))
+layout.write('{python_output}')
+print('wrote {python_output}')
 """,
         encoding="utf-8",
     )
     checks = [
         run([path, "-v"], timeout=60),
-        run([path, "-b", "-r", script], cwd=work_dir, timeout=120),
+        run([path, "-b", "-r", ruby_script], cwd=work_dir, timeout=120),
+        run([path, "-b", "-r", python_script], cwd=work_dir, timeout=120),
     ]
-    checks[-1]["output_file"] = str(output)
-    checks[-1]["output_size"] = output.stat().st_size if output.exists() else 0
+    checks[-2]["output_file"] = str(ruby_output)
+    checks[-2]["output_size"] = ruby_output.stat().st_size if ruby_output.exists() else 0
+    checks[-1]["output_file"] = str(python_output)
+    checks[-1]["output_size"] = python_output.stat().st_size if python_output.exists() else 0
     return checks
 
 

@@ -20,7 +20,7 @@
       "--expose klayout=klayout",
       "klayout=0.30.9",
       "smoke_monata_env_tools.py",
-      "writes a GDS in KLayout batch mode"
+      "KLayout Ruby/RBA and Python"
     ]
   }
 }

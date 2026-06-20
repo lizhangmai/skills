@@ -470,7 +470,8 @@ directory.
    ```
 
    This minimal smoke test runs `ngspice`, compiles small OSDI models with
-   `openvaf-r`, writes a GDS in KLayout batch mode, and checks `xschem --version`.
+   `openvaf-r`, writes GDS files through both KLayout Ruby/RBA and Python
+   batch APIs, and checks `xschem --version`.
 
 11. If the plan recommends `test_profiles.upstream_installed` and the user
    provided trusted local upstream checkouts, ask before running the optional

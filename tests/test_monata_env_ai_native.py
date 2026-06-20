@@ -1140,6 +1140,54 @@ def test_smoke_script_returns_structured_missing_tool_status(tmp_path):
     assert data["tools"]["ngspice"]["reason"] == "missing"
 
 
+def test_smoke_script_runs_klayout_ruby_and_python_batch_scripts(tmp_path):
+    bin_dir = tmp_path / "bin"
+    work_dir = tmp_path / "work"
+    fake_klayout = bin_dir / "klayout"
+    write_executable(
+        fake_klayout,
+        f"#!{sys.executable}\n"
+        "import re, sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "if '-v' in args:\n"
+        "    print('KLayout 0.30.9')\n"
+        "    raise SystemExit(0)\n"
+        "script = Path(args[args.index('-r') + 1])\n"
+        "text = script.read_text()\n"
+        "match = re.search(r\"layout\\.write\\(['\\\"]([^'\\\"]+)\", text)\n"
+        "if not match:\n"
+        "    print('missing layout.write path')\n"
+        "    raise SystemExit(2)\n"
+        "Path(match.group(1)).write_bytes(b'gds')\n"
+        "print('wrote ' + match.group(1))\n",
+    )
+    env = {**os.environ, "PATH": str(bin_dir)}
+
+    result = run(
+        [
+            sys.executable,
+            SMOKE_SCRIPT,
+            "--tool",
+            "klayout",
+            "--work-dir",
+            work_dir,
+            "--format",
+            "json",
+        ],
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    checks = data["tools"]["klayout"]["checks"]
+    scripts = [" ".join(item["command"]) for item in checks if "-r" in item["command"]]
+    assert any("klayout-smoke.rb" in script for script in scripts)
+    assert any("klayout-python-smoke.py" in script for script in scripts)
+    assert (work_dir / "klayout-smoke.gds").exists()
+    assert (work_dir / "klayout-python-smoke.gds").exists()
+
+
 def test_upstream_script_returns_structured_missing_source_status(tmp_path):
     missing = tmp_path / "missing-klayout"
 

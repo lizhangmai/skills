@@ -152,6 +152,35 @@ def test_plan_reports_ref_mismatch_and_recommended_commands(tmp_path):
     assert data["manifest"]["path"].endswith("monata-env-install-manifest.json")
 
 
+def test_plan_reports_git_unavailable_for_local_source_validation(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    klayout_source = tmp_path / "klayout"
+    write_monata_workspace(workspace)
+    klayout_source.mkdir()
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--format",
+            "json",
+        ],
+        env={"PATH": ""},
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["local_sources"]["klayout"]["status"] == "git-unavailable"
+    assert data["questions"][0]["id"] == "local_source_repair"
+
+
 def test_plan_skips_build_when_existing_channel_has_local_source_packages(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"
@@ -539,6 +568,57 @@ def test_plan_decisions_can_emit_isolated_live_install_smoke_command(tmp_path):
     assert "/tmp/skill-home/monata-env-session/monata-env-install-manifest.json" in live_install
     assert data["container"]["host_pixi_root"] == str(host_pixi_root.resolve())
     assert data["container"]["live_install_smoke_command"] == live_install
+
+
+def test_plan_decisions_can_emit_isolated_upstream_installed_command(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    image = tmp_path / "monata-env-python.sif"
+    host_pixi_root = tmp_path / "host-pixi"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    write_channel_artifacts(output_dir, ["ngspice", "openvaf-r", "klayout", "xschem"])
+    image.write_text("sif", encoding="utf-8")
+    (host_pixi_root / "bin").mkdir(parents=True)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            "--container-image",
+            image,
+            "--host-pixi-root",
+            host_pixi_root,
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--local-source",
+            f"xschem={xschem_source}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    singularity = {option["id"]: option for option in decisions["test_isolation"]["options"]}["singularity"]
+    upstream = singularity["commands"]["install_smoke_upstream"]
+    assert f"--bind {klayout_source.resolve()}:/mnt/sources/klayout:ro" in upstream
+    assert f"--bind {xschem_source.resolve()}:/mnt/sources/xschem:ro" in upstream
+    assert "--local-source klayout=/mnt/sources/klayout" in upstream
+    assert "--local-source xschem=/mnt/sources/xschem" in upstream
+    assert "--step install --step smoke --step upstream_installed_tests" in upstream
+    assert data["container"]["live_install_smoke_upstream_command"] == upstream
 
 
 def test_plan_decisions_recommend_local_sources_and_basic_upstream_profile(tmp_path):

@@ -132,6 +132,9 @@ def local_source_status(package, path):
     if not path.exists():
         item["status"] = "missing"
         return item
+    if shutil.which("git") is None:
+        item["status"] = "git-unavailable"
+        return item
     inside = run_git(path, "rev-parse", "--is-inside-work-tree")
     if inside != "true":
         item["status"] = "not-git"
@@ -456,7 +459,16 @@ def container_planner_command(root, output_dir, container_image, helper_script, 
     )
 
 
-def container_install_smoke_command(root, output_dir, container_image, helper_script, host_pixi_root, state_dir):
+def container_install_smoke_command(
+    root,
+    output_dir,
+    container_image,
+    helper_script,
+    host_pixi_root,
+    state_dir,
+    local_source_paths=None,
+    include_upstream=False,
+):
     if not host_pixi_root:
         return ""
     container_python = "/usr/local/bin/python3"
@@ -476,6 +488,16 @@ def container_install_smoke_command(root, output_dir, container_image, helper_sc
         )
     pixi_binary = Path(host_pixi_root) / "bin" / "pixi"
     bind = f"{pixi_binary}:/opt/host-pixi/bin/pixi:ro"
+    source_options = []
+    source_binds = []
+    if include_upstream:
+        for package, source_path in (local_source_paths or {}).items():
+            container_source = f"/mnt/sources/{package}"
+            source_binds.append(f"--bind {shlex.quote(f'{source_path}:{container_source}:ro')} ")
+            source_options.append(f"--local-source {package}={container_source} ")
+    runbook_steps = "--step install --step smoke"
+    if include_upstream:
+        runbook_steps += " --step upstream_installed_tests"
     return (
         container_runner_prefix(
             root,
@@ -485,6 +507,7 @@ def container_install_smoke_command(root, output_dir, container_image, helper_sc
             state_dir,
             extra_options=[
                 f"--bind {shlex.quote(bind)} ",
+                *source_binds,
                 "--prepend-path /tmp/skill-home/.pixi/bin ",
                 "--prepend-path /opt/host-pixi/bin ",
             ],
@@ -497,11 +520,12 @@ def container_install_smoke_command(root, output_dir, container_image, helper_sc
         f"{container_python} {plan_script} "
         "--root /mnt/project --output-dir /tmp/skill-channel "
         f"--session-dir /tmp/skill-home/monata-env-session{container_helper_arg} "
+        f"{''.join(source_options)}"
         "--write-manifest --format json "
         "> /tmp/skill-home/monata-env-session/plan.json && "
         f"{container_python} {execute_script} "
         "--manifest /tmp/skill-home/monata-env-session/monata-env-install-manifest.json "
-        "--step install --step smoke --allow-confirmation-required --format json'"
+        f"{runbook_steps} --allow-confirmation-required --format json'"
     )
 
 
@@ -537,6 +561,18 @@ def decisions(
     )
     if live_install_command:
         isolated_commands["install_smoke"] = live_install_command
+    live_upstream_command = container_install_smoke_command(
+        root,
+        output_dir,
+        container_image,
+        helper_script,
+        host_pixi_root,
+        container_state_dir,
+        local_source_paths=local_source_paths,
+        include_upstream=bool(local_source_paths),
+    )
+    if live_upstream_command:
+        isolated_commands["install_smoke_upstream"] = live_upstream_command
     return [
         {
             "id": "global_environment",
@@ -663,11 +699,14 @@ def questions(local_sources):
                 "recommended": True,
             }
         )
-    if any(item["status"] in {"missing", "not-git", "target-ref-missing"} for item in local_sources.values()):
+    if any(
+        item["status"] in {"missing", "not-git", "target-ref-missing", "git-unavailable"}
+        for item in local_sources.values()
+    ):
         items.append(
             {
                 "id": "local_source_repair",
-                "question": "One or more local sources cannot be validated. Ask the user for a corrected path, tag, or archive before building?",
+                "question": "One or more local sources cannot be validated, or git is unavailable. Ask the user for a corrected path, tag, archive, or validation-capable container before building?",
                 "recommended": True,
             }
         )
@@ -752,6 +791,16 @@ def create_plan(
                 helper_script,
                 resolved_host_pixi_root,
                 resolved_container_state_dir,
+            ),
+            "live_install_smoke_upstream_command": container_install_smoke_command(
+                root,
+                output_dir,
+                resolved_container_image,
+                helper_script,
+                resolved_host_pixi_root,
+                resolved_container_state_dir,
+                local_source_paths=local_source_paths,
+                include_upstream=bool(local_source_paths),
             ),
         },
         "local_sources": local_sources,

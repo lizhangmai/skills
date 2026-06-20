@@ -69,6 +69,10 @@ directory.
   `--local-source-ref package=ref` so the helper enforces this check.
 - If the user-provided channel already contains the detected packages, skip the
   build and do not require `rattler-build`.
+- If a container or minimal host image does not include `git`, local source ref
+  validation must report `git-unavailable` and ask for a corrected validation
+  path, a container with git, or user approval to proceed with trusted local
+  sources for non-build upstream-installed tests. Do not crash on missing git.
 - Do not build every circuit-toolchain package, run `--all`, or build the Xyce
   recipe stack unless the user explicitly asks for those tools.
 - Do not silently install host tools. If `pixi` is missing, stop before
@@ -184,6 +188,11 @@ directory.
    `--write-manifest`, stores the planner JSON under
    `/tmp/skill-home/monata-env-session`, and then executes only the
    `install` and `smoke` runbook steps against that isolated manifest.
+   When local KLayout/Xschem sources are also provided, the planner additionally
+   emits `commands.install_smoke_upstream`; that command binds each source
+   read-only under `/mnt/sources/<package>`, regenerates the manifest with
+   container-local `--local-source` paths, and runs `install`, `smoke`, and
+   `upstream_installed_tests`.
 
    Review `plan.decisions` with the user when there is meaningful choice:
    source policy, pixi global writes, test isolation, and upstream test
@@ -563,6 +572,11 @@ Use live checks in tiers:
 
   Use `bash -c`, not `bash -lc`, when relying on a prepended PATH; login shells
   may reset PATH and hide the bound pixi binary.
+  When trusted local KLayout/Xschem source checkouts are provided, use the
+  generated `commands.install_smoke_upstream` variant instead. It adds read-only
+  source binds like
+  `<klayout-source>:/mnt/sources/klayout:ro` and runs the optional
+  `upstream_installed_tests` step after the smoke test.
 
 ## Feedback Protocol
 

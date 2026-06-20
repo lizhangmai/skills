@@ -6,6 +6,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "skill_container.py"
+SKILL_SCRIPT = REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "skill_container.py"
 
 
 def run(command):
@@ -121,3 +122,28 @@ def test_skill_container_dry_run_isolates_singularity_host_cache(tmp_path):
     assert data["host_env"]["SINGULARITY_TMPDIR"] == str((state_dir / "singularity-tmp").resolve())
     assert (state_dir / "singularity-cache").is_dir()
     assert (state_dir / "singularity-tmp").is_dir()
+
+
+def test_monata_env_skill_installs_local_container_runner(tmp_path):
+    workspace = tmp_path / "workspace"
+    state_dir = tmp_path / "state"
+    workspace.mkdir()
+
+    result = run(
+        [
+            sys.executable,
+            SKILL_SCRIPT,
+            "--dry-run",
+            "--state-dir",
+            state_dir,
+            "--workspace",
+            workspace,
+            "--",
+            "true",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["repo_root"].endswith("plugins/monata-env/skills/monata-env")
+    assert "plugins/monata-env" in " ".join(data["command"])

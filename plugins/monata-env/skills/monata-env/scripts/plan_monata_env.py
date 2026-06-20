@@ -322,7 +322,7 @@ def decisions(root, output_dir, local_source_paths, profiles, build_needed):
         f"--channel {shlex.quote(str(output_dir))} "
         "--dry-run -- "
         "bash -lc 'cd /mnt/project && python3 "
-        "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py "
+        "/mnt/skills/scripts/plan_monata_env.py "
         "--root /mnt/project --output-dir /tmp/skill-channel --write-manifest --format json'"
     )
     return [

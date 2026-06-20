@@ -39,6 +39,7 @@
       "scripts/detect_monata_tools.py",
       "scripts/plan_monata_env.py",
       "scripts/record_monata_env_session.py",
+      "scripts/skill_container.py",
       "scripts/smoke_monata_env_tools.py",
       "scripts/test_monata_env_upstream.py"
     ]

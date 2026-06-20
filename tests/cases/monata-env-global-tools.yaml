@@ -24,6 +24,8 @@
       "klayout=0.30.9",
       "xschem=3.4.7",
       "plan_monata_env.py",
+      "runbook",
+      "record_after",
       "record_monata_env_session.py",
       "smoke_monata_env_tools.py",
       "verification.smoke",

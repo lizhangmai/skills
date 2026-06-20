@@ -120,9 +120,14 @@ directory.
      --format json
    ```
 
-   Review the plan's `questions`. Ask the user before doing a recommended
-   fallback such as creating temporary detached worktrees, installing missing
-   host tools, or writing to the pixi global environment.
+   Treat `plan.runbook` as the authoritative execution sequence. Each runbook
+   item contains the command to run, whether user confirmation is required,
+   where JSON stdout should be captured, and a `record_after` command that must
+   run after the step so the manifest keeps return codes, package artifacts,
+   and verification payloads. Review the plan's `questions`. Ask the user
+   before doing a recommended fallback such as creating temporary detached
+   worktrees, installing missing host tools, or writing to the pixi global
+   environment.
 
 5. Detect the required circuit-tool packages from the Monata workspace when you
    need a shell list outside the planner:
@@ -280,10 +285,12 @@ directory.
    test tree. Use `--profile full` only when the user accepts longer runtime
    and higher dependency/display risk.
 
-12. Use `scripts/record_monata_env_session.py` after build, install, smoke, and
-   upstream test commands. The manifest must keep the plan JSON, exact commands
-   run, package artifacts, local-source refs, pixi global environment name,
-   `verification.smoke`, and `verification.upstream_installed` when run.
+12. Use the planner's `runbook[*].record_after` commands after build, install,
+   smoke, and upstream test commands. If you must execute a command outside the
+   planner output, call `scripts/record_monata_env_session.py` directly. The
+   manifest must keep the plan JSON, exact commands run, package artifacts,
+   local-source refs, pixi global environment name, `verification.smoke`, and
+   `verification.upstream_installed` when run.
 
    After a build command, record generated artifacts without requiring
    `conda index`:

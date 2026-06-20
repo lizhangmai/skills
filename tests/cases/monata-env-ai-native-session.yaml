@@ -17,6 +17,8 @@
       "AI-native setup",
       "scripts/plan_monata_env.py",
       "--write-manifest",
+      "plan.runbook",
+      "record_after",
       "test_profiles",
       "questions",
       "scripts/smoke_monata_env_tools.py",

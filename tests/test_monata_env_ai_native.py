@@ -172,6 +172,97 @@ def test_plan_recommends_upstream_installed_tests_when_sources_are_provided(tmp_
     assert f"--xschem-source {xschem_source.resolve()}" in command
 
 
+def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    write_monata_workspace(workspace)
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    runbook = {step["id"]: step for step in data["runbook"]}
+    assert list(runbook)[:4] == ["check_channel", "build", "install", "smoke"]
+
+    build_step = runbook["build"]
+    assert build_step["recommended"] is True
+    assert build_step["command"] == data["commands"]["build"]
+    assert build_step["record_after"]["returncode_var"] == "BUILD_RC"
+    build_record = " ".join(build_step["record_after"]["command"])
+    assert "record_monata_env_session.py" in build_record
+    assert "--command-kind build" in build_record
+    assert f"--artifact-dir {output_dir.resolve()}" in build_record
+    assert "--package ngspice" in build_record
+    assert "--package openvaf-r" in build_record
+    assert "--package klayout" in build_record
+    assert "--package xschem" in build_record
+
+    install_step = runbook["install"]
+    assert install_step["record_after"]["returncode_var"] == "INSTALL_RC"
+    assert "--command-kind install" in " ".join(install_step["record_after"]["command"])
+
+    smoke_step = runbook["smoke"]
+    smoke_json = output_dir.resolve() / "monata-env-smoke.json"
+    assert smoke_step["stdout_path"] == str(smoke_json)
+    assert smoke_step["record_after"]["returncode_var"] == "SMOKE_RC"
+    smoke_record = " ".join(smoke_step["record_after"]["command"])
+    assert "--command-kind smoke" in smoke_record
+    assert f"--stdout-file {smoke_json}" in smoke_record
+    assert f"--verification smoke={smoke_json}" in smoke_record
+
+
+def test_plan_runbook_records_optional_upstream_installed_tests(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--local-source",
+            f"xschem={xschem_source}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    runbook = {step["id"]: step for step in data["runbook"]}
+    upstream_step = runbook["upstream_installed_tests"]
+    upstream_json = output_dir.resolve() / "monata-env-upstream-installed.json"
+    assert upstream_step["recommended"] is True
+    assert upstream_step["requires_confirmation"] is True
+    assert upstream_step["command"] == data["commands"]["upstream_installed_tests"]
+    assert upstream_step["stdout_path"] == str(upstream_json)
+    upstream_record = " ".join(upstream_step["record_after"]["command"])
+    assert "--command-kind upstream_installed_tests" in upstream_record
+    assert f"--stdout-file {upstream_json}" in upstream_record
+    assert f"--verification upstream_installed={upstream_json}" in upstream_record
+
+
 def test_smoke_script_returns_structured_missing_tool_status(tmp_path):
     empty_bin = tmp_path / "bin"
     empty_bin.mkdir()

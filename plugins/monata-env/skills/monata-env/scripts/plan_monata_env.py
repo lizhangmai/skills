@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import shlex
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,10 @@ EXPOSED_COMMANDS = {
     "klayout": "klayout",
     "xschem": "xschem",
 }
+
+
+def command_string(command):
+    return shlex.join(str(part) for part in command)
 
 
 def run_git(path, *args):
@@ -195,6 +200,117 @@ def upstream_installed_test_command(local_sources):
     return command if len(command) > 6 else []
 
 
+def record_after_command(manifest_path, kind, command, returncode_var, stdout_path=None, verification=None, artifact_dir=None, packages=None):
+    record = [
+        sys.executable,
+        str(SCRIPT_DIR / "record_monata_env_session.py"),
+        "--manifest",
+        str(manifest_path),
+        "--command-kind",
+        kind,
+        "--command",
+        command_string(command),
+        "--returncode",
+        f"${returncode_var}",
+    ]
+    if stdout_path:
+        record.extend(["--stdout-file", str(stdout_path)])
+    if verification:
+        record.extend(["--verification", f"{verification}={stdout_path}"])
+    if artifact_dir:
+        record.extend(["--artifact-dir", str(artifact_dir)])
+    for package in packages or []:
+        record.extend(["--package", package])
+    return {
+        "returncode_var": returncode_var,
+        "command": record,
+    }
+
+
+def runbook(commands, build_packages, output_dir, manifest_path, upstream_recommended):
+    smoke_json = output_dir / "monata-env-smoke.json"
+    upstream_json = output_dir / "monata-env-upstream-installed.json"
+    return [
+        {
+            "id": "check_channel",
+            "description": "Inspect the requested local channel before building.",
+            "recommended": True,
+            "requires_confirmation": False,
+            "command": commands["check_channel"],
+            "record_after": record_after_command(
+                manifest_path,
+                "check_channel",
+                commands["check_channel"],
+                "CHECK_CHANNEL_RC",
+            ),
+        },
+        {
+            "id": "build",
+            "description": "Build only missing or local-source packages, then record generated package artifacts.",
+            "recommended": bool(commands["build"]),
+            "requires_confirmation": True,
+            "command": commands["build"],
+            "record_after": record_after_command(
+                manifest_path,
+                "build",
+                commands["build"],
+                "BUILD_RC",
+                artifact_dir=output_dir,
+                packages=build_packages,
+            )
+            if commands["build"]
+            else None,
+        },
+        {
+            "id": "install",
+            "description": "Install exposed circuit-tool commands into the pixi global monata-env environment.",
+            "recommended": True,
+            "requires_confirmation": True,
+            "command": commands["install"],
+            "record_after": record_after_command(
+                manifest_path,
+                "install",
+                commands["install"],
+                "INSTALL_RC",
+            ),
+        },
+        {
+            "id": "smoke",
+            "description": "Run direct installed-tool smoke tests without importing Monata or bootstrapping techlibs.",
+            "recommended": True,
+            "requires_confirmation": False,
+            "command": commands["smoke"],
+            "stdout_path": str(smoke_json),
+            "record_after": record_after_command(
+                manifest_path,
+                "smoke",
+                commands["smoke"],
+                "SMOKE_RC",
+                stdout_path=smoke_json,
+                verification="smoke",
+            ),
+        },
+        {
+            "id": "upstream_installed_tests",
+            "description": "Optionally run safe upstream test subsets against installed tools when local sources are available.",
+            "recommended": upstream_recommended,
+            "requires_confirmation": True,
+            "command": commands["upstream_installed_tests"],
+            "stdout_path": str(upstream_json),
+            "record_after": record_after_command(
+                manifest_path,
+                "upstream_installed_tests",
+                commands["upstream_installed_tests"],
+                "UPSTREAM_RC",
+                stdout_path=upstream_json,
+                verification="upstream_installed",
+            )
+            if commands["upstream_installed_tests"]
+            else None,
+        },
+    ]
+
+
 def test_profiles(local_sources):
     upstream_recommended = any(package in local_sources for package in ("klayout", "xschem"))
     return {
@@ -261,6 +377,14 @@ def create_plan(root, output_dir, local_source_values, env_name):
         for package in packages
     }
     manifest_path = output_dir / "monata-env-install-manifest.json" if output_dir else Path("monata-env-install-manifest.json")
+    commands = {
+        "check_channel": check_channel_command(packages, output_dir),
+        "build": build_command(build_packages, output_dir, selected_local_sources) if build_packages else [],
+        "install": install_command(packages, output_dir, env_name),
+        "smoke": [sys.executable, str(SCRIPT_DIR / "smoke_monata_env_tools.py"), "--format", "json"],
+        "upstream_installed_tests": upstream_installed_test_command(local_source_paths),
+    }
+    profiles = test_profiles(local_source_paths)
     return {
         "mode": "ai-native-session",
         "root": str(Path(root).resolve()),
@@ -271,14 +395,15 @@ def create_plan(root, output_dir, local_source_values, env_name):
         "local_sources": local_sources,
         "tools": tools,
         "questions": questions(local_sources),
-        "commands": {
-            "check_channel": check_channel_command(packages, output_dir),
-            "build": build_command(build_packages, output_dir, selected_local_sources) if build_packages else [],
-            "install": install_command(packages, output_dir, env_name),
-            "smoke": [sys.executable, str(SCRIPT_DIR / "smoke_monata_env_tools.py"), "--format", "json"],
-            "upstream_installed_tests": upstream_installed_test_command(local_source_paths),
-        },
-        "test_profiles": test_profiles(local_source_paths),
+        "commands": commands,
+        "runbook": runbook(
+            commands,
+            build_packages,
+            output_dir,
+            manifest_path,
+            profiles["upstream_installed"]["recommended"],
+        ),
+        "test_profiles": profiles,
         "build_needed": bool(build_packages),
         "build_packages": build_packages,
         "manifest": {

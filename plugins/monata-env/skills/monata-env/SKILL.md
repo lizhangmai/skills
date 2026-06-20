@@ -248,7 +248,8 @@ directory.
    appears to hang, inspect its `status_path` first to confirm whether the
    executor is still running the command. If a step times out, inspect the
    persisted stdout/stderr logs and use the executor's `next_actions` before
-   retrying with a larger timeout or a local cache.
+   retrying with a larger timeout or a local cache; final `status_path` JSON
+   includes the same `next_actions` when the executor can diagnose a failure.
    Review the plan's `questions`. Ask the user before doing a
    recommended fallback such as creating temporary detached worktrees,
    installing missing host tools, or writing to the pixi global environment.

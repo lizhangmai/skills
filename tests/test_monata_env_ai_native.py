@@ -1651,6 +1651,7 @@ def test_execute_runbook_suggests_full_regression_recovery_after_xschem_timeout(
 
 def test_execute_runbook_times_out_step_and_suggests_timeout_recovery(tmp_path):
     plan_path = tmp_path / "plan.json"
+    status_path = tmp_path / "install.status.json"
     plan_path.write_text(
         json.dumps(
             {
@@ -1660,6 +1661,7 @@ def test_execute_runbook_times_out_step_and_suggests_timeout_recovery(tmp_path):
                         "recommended": True,
                         "requires_confirmation": False,
                         "timeout_seconds": 1,
+                        "status_path": str(status_path),
                         "command": [
                             sys.executable,
                             "-c",
@@ -1683,6 +1685,9 @@ def test_execute_runbook_times_out_step_and_suggests_timeout_recovery(tmp_path):
     assert "timed out after 1s" in step["stderr"]
     assert step["next_actions"][0]["id"] == "inspect-timeout-or-cache"
     assert step["next_actions"][0]["requires_user_input"] is True
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "executed"
+    assert status["next_actions"][0]["id"] == "inspect-timeout-or-cache"
 
 
 def test_record_manifest_appends_command_and_verification_payload(tmp_path):

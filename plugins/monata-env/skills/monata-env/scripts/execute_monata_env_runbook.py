@@ -351,16 +351,15 @@ def execute_step(step, args, explicit_steps, results_by_id, selected_ids):
     if actions:
         item["next_actions"] = actions
     if status_path:
-        write_status(
-            step,
-            "executed",
-            {
-                "returncode": item["returncode"],
-                "record_returncode": item["record_returncode"],
-                "stdout_path": item["stdout_path"],
-                "stderr_path": item["stderr_path"],
-            },
-        )
+        final_status = {
+            "returncode": item["returncode"],
+            "record_returncode": item["record_returncode"],
+            "stdout_path": item["stdout_path"],
+            "stderr_path": item["stderr_path"],
+        }
+        if actions:
+            final_status["next_actions"] = actions
+        write_status(step, "executed", final_status)
     return item
 
 

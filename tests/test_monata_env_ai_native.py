@@ -225,12 +225,18 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
     assert list(runbook)[:4] == ["check_channel", "build", "install", "smoke"]
 
     build_step = runbook["build"]
+    build_stdout = output_dir.resolve() / "monata-env-build.out"
+    build_stderr = output_dir.resolve() / "monata-env-build.err"
     assert build_step["recommended"] is True
     assert build_step["command"] == data["commands"]["build"]
+    assert build_step["stdout_path"] == str(build_stdout)
+    assert build_step["stderr_path"] == str(build_stderr)
     assert build_step["record_after"]["returncode_var"] == "BUILD_RC"
     build_record = " ".join(build_step["record_after"]["command"])
     assert "record_monata_env_session.py" in build_record
     assert "--command-kind build" in build_record
+    assert f"--stdout-file {build_stdout}" in build_record
+    assert f"--stderr-file {build_stderr}" in build_record
     assert f"--artifact-dir {output_dir.resolve()}" in build_record
     assert "--package ngspice" in build_record
     assert "--package openvaf-r" in build_record
@@ -239,17 +245,22 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
 
     install_step = runbook["install"]
     assert install_step["depends_on"] == ["build"]
+    assert install_step["stdout_path"] == str(output_dir.resolve() / "monata-env-install.out")
+    assert install_step["stderr_path"] == str(output_dir.resolve() / "monata-env-install.err")
     assert install_step["record_after"]["returncode_var"] == "INSTALL_RC"
     assert "--command-kind install" in " ".join(install_step["record_after"]["command"])
 
     smoke_step = runbook["smoke"]
     assert smoke_step["depends_on"] == ["install"]
     smoke_json = output_dir.resolve() / "monata-env-smoke.json"
+    smoke_stderr = output_dir.resolve() / "monata-env-smoke.err"
     assert smoke_step["stdout_path"] == str(smoke_json)
+    assert smoke_step["stderr_path"] == str(smoke_stderr)
     assert smoke_step["record_after"]["returncode_var"] == "SMOKE_RC"
     smoke_record = " ".join(smoke_step["record_after"]["command"])
     assert "--command-kind smoke" in smoke_record
     assert f"--stdout-file {smoke_json}" in smoke_record
+    assert f"--stderr-file {smoke_stderr}" in smoke_record
     assert f"--verification smoke={smoke_json}" in smoke_record
 
 
@@ -433,6 +444,7 @@ def test_execute_runbook_captures_stdout_and_records_verification(tmp_path):
     manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
     plan_path = tmp_path / "plan.json"
     smoke_json = tmp_path / "channel" / "smoke.json"
+    smoke_err = tmp_path / "channel" / "smoke.err"
     payload = {"ok": True, "tools": {"ngspice": {"ok": True}}}
     write_manifest_seed(manifest)
     command = [
@@ -450,6 +462,7 @@ def test_execute_runbook_captures_stdout_and_records_verification(tmp_path):
                         "requires_confirmation": False,
                         "command": command,
                         "stdout_path": str(smoke_json),
+                        "stderr_path": str(smoke_err),
                         "record_after": {
                             "returncode_var": "SMOKE_RC",
                             "command": [
@@ -465,6 +478,8 @@ def test_execute_runbook_captures_stdout_and_records_verification(tmp_path):
                                 "$SMOKE_RC",
                                 "--stdout-file",
                                 str(smoke_json),
+                                "--stderr-file",
+                                str(smoke_err),
                                 "--verification",
                                 f"smoke={smoke_json}",
                             ],
@@ -486,9 +501,11 @@ def test_execute_runbook_captures_stdout_and_records_verification(tmp_path):
     assert summary["steps"][0]["returncode"] == 0
     assert summary["steps"][0]["record_returncode"] == 0
     assert smoke_json.exists()
+    assert smoke_err.exists()
     manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
     assert manifest_data["verification"]["smoke"] == payload
     assert manifest_data["execution"]["commands_run"][0]["returncode"] == 0
+    assert manifest_data["execution"]["commands_run"][0]["stderr_file"] == str(smoke_err.resolve())
 
 
 def test_execute_runbook_requires_confirmation_for_mutating_steps(tmp_path):

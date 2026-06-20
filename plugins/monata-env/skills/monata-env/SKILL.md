@@ -124,10 +124,11 @@ directory.
    source policy, pixi global writes, test isolation, and upstream test
    profile. Treat `plan.runbook` as the authoritative execution sequence. Each
    runbook item contains the command to run, whether user confirmation is
-   required, which previous step ids it `depends_on`, where JSON stdout should
-   be captured, and a `record_after` command that must run after the step so
-   the manifest keeps return codes, package artifacts, and verification
-   payloads. Review the plan's `questions`. Ask the user before doing a
+   required, which previous step ids it `depends_on`, where step
+   `stdout_path` and `stderr_path` logs should be captured, and a
+   `record_after` command that must run after the step so the manifest keeps
+   return codes, log file paths, package artifacts, and verification payloads.
+   Review the plan's `questions`. Ask the user before doing a
    recommended fallback such as creating temporary detached worktrees,
    installing missing host tools, or writing to the pixi global environment.
    Check `plan.helper.conda_build_script`: when it exists, the generated
@@ -281,7 +282,8 @@ directory.
 
    ```bash
    SMOKE_JSON="$CONDA_BUILD_OUTPUT_DIR/monata-env-smoke.json"
-   if python scripts/smoke_monata_env_tools.py --format json > "$SMOKE_JSON"; then
+   SMOKE_ERR="$CONDA_BUILD_OUTPUT_DIR/monata-env-smoke.err"
+   if python scripts/smoke_monata_env_tools.py --format json > "$SMOKE_JSON" 2> "$SMOKE_ERR"; then
      SMOKE_RC=0
    else
      SMOKE_RC=$?
@@ -292,6 +294,7 @@ directory.
      --command "python scripts/smoke_monata_env_tools.py --format json" \
      --returncode "$SMOKE_RC" \
      --stdout-file "$SMOKE_JSON" \
+     --stderr-file "$SMOKE_ERR" \
      --verification smoke="$SMOKE_JSON"
    test "$SMOKE_RC" -eq 0
    ```
@@ -335,7 +338,8 @@ directory.
    If you must execute a command outside the planner output, call
    `scripts/record_monata_env_session.py` directly. The manifest must keep the
    plan JSON, exact commands run, package artifacts, local-source refs, pixi
-   global environment name, `verification.smoke`, and
+   global environment name, per-step `stdout_file` and `stderr_file` logs,
+   `verification.smoke`, and
    `verification.upstream_installed` when run.
 
    After a build command, record generated artifacts without requiring
@@ -347,6 +351,8 @@ directory.
      --command-kind build \
      --command "python scripts/rattler_channel.py build --recipe-set circuit-toolchain ..." \
      --returncode "$BUILD_RC" \
+     --stdout-file "$CONDA_BUILD_OUTPUT_DIR/monata-env-build.out" \
+     --stderr-file "$CONDA_BUILD_OUTPUT_DIR/monata-env-build.err" \
      --artifact-dir "$CONDA_BUILD_OUTPUT_DIR" \
      --package ngspice \
      --package openvaf-r \
@@ -365,7 +371,8 @@ the commands directly and report that no pixi global install was needed:
 
 ```bash
 SMOKE_JSON="$CONDA_BUILD_OUTPUT_DIR/monata-env-smoke.json"
-if python scripts/smoke_monata_env_tools.py --format json > "$SMOKE_JSON"; then
+SMOKE_ERR="$CONDA_BUILD_OUTPUT_DIR/monata-env-smoke.err"
+if python scripts/smoke_monata_env_tools.py --format json > "$SMOKE_JSON" 2> "$SMOKE_ERR"; then
   SMOKE_RC=0
 else
   SMOKE_RC=$?
@@ -376,6 +383,7 @@ python scripts/record_monata_env_session.py \
   --command "python scripts/smoke_monata_env_tools.py --format json" \
   --returncode "$SMOKE_RC" \
   --stdout-file "$SMOKE_JSON" \
+  --stderr-file "$SMOKE_ERR" \
   --verification smoke="$SMOKE_JSON"
 test "$SMOKE_RC" -eq 0
 ```

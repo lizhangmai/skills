@@ -101,6 +101,16 @@ def write_stdout(step, stdout):
     return str(path)
 
 
+def write_stderr(step, stderr):
+    path_text = step.get("stderr_path")
+    if not path_text:
+        return ""
+    path = Path(path_text).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(stderr, encoding="utf-8")
+    return str(path)
+
+
 def substitute_returncode(command, var_name, returncode):
     if not var_name:
         return [str(part) for part in command]
@@ -209,14 +219,16 @@ def execute_step(step, args, explicit_steps, results_by_id, selected_ids):
 
     result = run_command(step["command"], cwd=args.cwd)
     stdout_path = write_stdout(step, result.stdout)
+    stderr_path = write_stderr(step, result.stderr)
     record_result = run_record_after(step, result.returncode, cwd=args.cwd)
     item.update(
         {
             "status": "executed",
             "returncode": result.returncode,
             "stdout_path": stdout_path,
+            "stderr_path": stderr_path,
             "stdout": result.stdout[-4000:] if not stdout_path else "",
-            "stderr": result.stderr[-4000:],
+            "stderr": result.stderr[-4000:] if not stderr_path else "",
             "record_returncode": record_result["returncode"] if record_result else None,
         }
     )

@@ -338,12 +338,24 @@ def next_actions_for_failure(step, item):
                             "id": "provide_local_source",
                             "label": "Provide local checkout",
                             "requires_user_input": True,
+                            "replan_arguments": [
+                                "--local-source",
+                                "klayout=<klayout-source>",
+                                "--local-source",
+                                "xschem=<xschem-source>",
+                            ],
                             "effect": "Re-run the planner with --local-source package=/path for KLayout and/or Xschem.",
                         },
                         {
                             "id": "provide_source_archive",
                             "label": "Provide source archive",
                             "requires_user_input": True,
+                            "replan_arguments": [
+                                "--local-source",
+                                "klayout=<klayout-archive>",
+                                "--local-source",
+                                "xschem=<xschem-archive>",
+                            ],
                             "effect": "Use a trusted local tar/zip archive when a checkout is unavailable.",
                         },
                         {

@@ -317,7 +317,10 @@ directory.
    the user must choose between local sources, source archives, retrying the
    network, creating a detached worktree, or building missing packages. Present
    the `decision.options` to the user instead of reducing the failure to a raw
-   log paste.
+   log paste. When an option includes `replan_arguments`, replace placeholders
+   such as `<klayout-source>` or `<xschem-source>` with user-provided paths and
+   re-run `plan_monata_env.py` with those arguments to continue the same setup
+   flow.
    The final `audit` runbook step calls
    `scripts/audit_monata_env_manifest.py --check-live`; it reads the manifest,
    checks current PATH shims plus `pixi global list --json`, and reports

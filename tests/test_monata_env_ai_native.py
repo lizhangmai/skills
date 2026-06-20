@@ -1743,6 +1743,76 @@ def test_execute_runbook_suggests_local_sources_after_network_failure(tmp_path):
     assert summary["next_actions"][0]["id"] == "provide-local-source"
 
 
+def test_network_failure_recovery_replans_with_user_provided_local_sources(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "build",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import sys; print('failed to download source: network timeout', file=sys.stderr); sys.exit(1)",
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    failure = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert failure.returncode == 1, failure.stdout
+    action = json.loads(failure.stdout)["next_actions"][0]
+    source_option = {option["id"]: option for option in action["decision"]["options"]}["provide_local_source"]
+    replan_args = [
+        part.replace("<klayout-source>", str(klayout_source.resolve())).replace(
+            "<xschem-source>", str(xschem_source.resolve())
+        )
+        for part in source_option["replan_arguments"]
+    ]
+    recovered = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            *replan_args,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert recovered.returncode == 0, recovered.stdout
+    data = json.loads(recovered.stdout)
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    assert decisions["source_policy"]["default"] == "local_sources"
+    build_command = " ".join(data["commands"]["build"])
+    assert f"--local-source klayout={klayout_source.resolve()}" in build_command
+    assert f"--local-source xschem={xschem_source.resolve()}" in build_command
+    upstream_command = " ".join(data["commands"]["upstream_installed_tests"])
+    assert f"--klayout-source {klayout_source.resolve()}" in upstream_command
+    assert f"--xschem-source {xschem_source.resolve()}" in upstream_command
+
+
 def test_execute_runbook_suggests_helper_resolution_when_helper_script_is_missing(tmp_path):
     plan_path = tmp_path / "plan.json"
     missing_helper = tmp_path / "missing-rattler-channel.py"

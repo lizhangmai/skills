@@ -165,6 +165,28 @@ def copy_xschem_test_tree(source, work_dir):
     return tests_dest
 
 
+def run_xschem_basic_create_save(tests_dir, xschem, timeout):
+    output = tests_dir / "create_save" / "results" / "simple_inv.sch"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    check = run(
+        [
+            xschem,
+            output,
+            "--pipe",
+            "-d",
+            "1",
+            "--script",
+            "create_save/tests/simple_inv.tcl",
+        ],
+        cwd=tests_dir,
+        timeout=timeout,
+    )
+    check["id"] = "xschem-basic-create-save"
+    check["output_file"] = str(output)
+    check["output_size"] = output.stat().st_size if output.exists() else 0
+    return check
+
+
 def run_xschem_upstream(source, work_dir, env_name, env_prefix, profile, timeout):
     if source is None:
         return skipped("source-not-provided")
@@ -180,31 +202,17 @@ def run_xschem_upstream(source, work_dir, env_name, env_prefix, profile, timeout
         return failure("tclsh-missing", source)
 
     tests_dir = copy_xschem_test_tree(source, work_dir)
+    checks = [run_xschem_basic_create_save(tests_dir, xschem, timeout)]
     if profile == "full":
-        check = run([tclsh, "run_regression.tcl"], cwd=tests_dir, timeout=timeout)
-    else:
-        output = tests_dir / "create_save" / "results" / "simple_inv.sch"
-        output.parent.mkdir(parents=True, exist_ok=True)
-        check = run(
-            [
-                xschem,
-                output,
-                "--pipe",
-                "-d",
-                "1",
-                "--script",
-                "create_save/tests/simple_inv.tcl",
-            ],
-            cwd=tests_dir,
-            timeout=timeout,
-        )
-        check["output_file"] = str(output)
-        check["output_size"] = output.stat().st_size if output.exists() else 0
+        if checks[0]["returncode"] == 0:
+            check = run([tclsh, "run_regression.tcl"], cwd=tests_dir, timeout=timeout)
+            check["id"] = "xschem-full-regression"
+            checks.append(check)
     return {
-        "ok": check["returncode"] == 0,
-        "reason": checks_reason([check]),
+        "ok": all(check["returncode"] == 0 for check in checks),
+        "reason": checks_reason(checks),
         "source": str(source),
-        "checks": [check],
+        "checks": checks,
     }
 
 

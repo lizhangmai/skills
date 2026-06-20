@@ -181,6 +181,24 @@ def next_actions_for_failure(step, item):
     text = output_text(item)
     step_id = step.get("id", "")
     actions = []
+    if step_id == "upstream_installed_tests" and "xschem-full-regression" in text and "timed out after" in text:
+        actions.extend(
+            [
+                {
+                    "id": "inspect-xschem-full-regression-timeout",
+                    "title": "Inspect Xschem full regression timeout",
+                    "requires_user_input": False,
+                    "prompt": "The Xschem basic create-save check passed, but xschem-full-regression timed out. Inspect that check output, then rerun full upstream tests with a larger timeout or use the basic profile for routine validation.",
+                },
+                {
+                    "id": "use-basic-upstream-profile",
+                    "title": "Re-plan with the basic upstream profile",
+                    "requires_user_input": False,
+                    "command": "python scripts/plan_monata_env.py --upstream-profile basic ...",
+                    "prompt": "The basic upstream profile already validates installed Xschem create/save behavior without the long Xschem regression driver.",
+                },
+            ]
+        )
     if "timed out after" in text:
         actions.append(
             {

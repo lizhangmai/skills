@@ -458,10 +458,13 @@ directory.
    basic profile runs a small KLayout upstream script/Python-binding subset and
    an Xschem upstream `create_save` test from a temporary copy of the source
    test tree. Use `--profile full` only when the user accepts longer runtime
-   and higher dependency/display risk. Full Xschem regression needs `tclsh`;
-   the upstream test helper first looks inside the pixi global env prefix, then
-   falls back to `PATH`, and the executor will suggest installing/exposing Tcl
-   or re-planning with `--upstream-profile basic` if `tclsh` is missing.
+   and higher dependency/display risk. The full Xschem profile first records
+   `xschem-basic-create-save`, then runs `xschem-full-regression`, so a timeout
+   can still show whether basic installed-tool behavior passed. Full Xschem
+   regression needs `tclsh`; the upstream test helper first looks inside the
+   pixi global env prefix, then falls back to `PATH`. The executor will suggest
+   installing/exposing Tcl, inspecting full-regression timeout output, or
+   re-planning with `--upstream-profile basic` when those cases occur.
 
 12. Prefer `scripts/execute_monata_env_runbook.py` so `runbook[*].record_after`
    runs automatically after build, install, smoke, and upstream test commands.

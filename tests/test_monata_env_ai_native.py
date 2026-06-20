@@ -975,7 +975,7 @@ def test_upstream_script_uses_env_prefix_tclsh_for_full_xschem_profile(tmp_path)
     (tests_dir / "run_regression.tcl").write_text("puts ok\n", encoding="utf-8")
     (library_dir / "README").write_text("test library\n", encoding="utf-8")
 
-    xschem = fake_bin / "xschem"
+    xschem = env_prefix / "bin" / "xschem"
     xschem.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     xschem.chmod(0o755)
     tclsh = env_prefix / "bin" / "tclsh"
@@ -994,6 +994,8 @@ def test_upstream_script_uses_env_prefix_tclsh_for_full_xschem_profile(tmp_path)
             source,
             "--env-prefix",
             env_prefix,
+            "--env-name",
+            "test-monata-env",
             "--profile",
             "full",
         ],
@@ -1003,7 +1005,63 @@ def test_upstream_script_uses_env_prefix_tclsh_for_full_xschem_profile(tmp_path)
     assert result.returncode == 0, result.stdout
     data = json.loads(result.stdout)
     assert data["profiles"]["xschem"]["ok"] is True
-    assert data["profiles"]["xschem"]["checks"][0]["command"][0] == str(tclsh.resolve())
+    assert data["profiles"]["xschem"]["checks"][-1]["command"][0] == str(tclsh.resolve())
+
+
+def test_upstream_script_splits_full_xschem_profile_into_basic_and_regression_checks(tmp_path):
+    source = tmp_path / "xschem"
+    tests_dir = source / "tests"
+    library_dir = source / "xschem_library"
+    fake_bin = tmp_path / "bin"
+    env_prefix = tmp_path / "monata-env"
+    tests_dir.mkdir(parents=True)
+    library_dir.mkdir()
+    fake_bin.mkdir()
+    (env_prefix / "bin").mkdir(parents=True)
+    (tests_dir / "run_regression.tcl").write_text("puts ok\n", encoding="utf-8")
+    (library_dir / "README").write_text("test library\n", encoding="utf-8")
+
+    xschem = env_prefix / "bin" / "xschem"
+    xschem.write_text(
+        "#!/bin/sh\n"
+        "mkdir -p \"$(dirname \"$1\")\"\n"
+        "printf 'schematic\\n' > \"$1\"\n"
+        "printf 'basic-create-save-ok\\n'\n",
+        encoding="utf-8",
+    )
+    xschem.chmod(0o755)
+    tclsh = env_prefix / "bin" / "tclsh"
+    tclsh.write_text("#!/bin/sh\nprintf 'full-regression-ok %s\\n' \"$1\"\nexit 0\n", encoding="utf-8")
+    tclsh.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = str(fake_bin)
+    result = run(
+        [
+            sys.executable,
+            UPSTREAM_SCRIPT,
+            "--format",
+            "json",
+            "--xschem-source",
+            source,
+            "--env-prefix",
+            env_prefix,
+            "--env-name",
+            "test-monata-env",
+            "--profile",
+            "full",
+        ],
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    checks = data["profiles"]["xschem"]["checks"]
+    assert [check["id"] for check in checks] == ["xschem-basic-create-save", "xschem-full-regression"]
+    assert checks[0]["command"][0] == str(xschem.resolve())
+    assert checks[0]["output_size"] > 0
+    assert checks[1]["command"][0] == str(tclsh.resolve())
+    assert "full-regression-ok" in checks[1]["output"]
 
 
 def test_upstream_script_reports_structured_timeout_for_full_xschem_profile(tmp_path):
@@ -1019,7 +1077,7 @@ def test_upstream_script_reports_structured_timeout_for_full_xschem_profile(tmp_
     (tests_dir / "run_regression.tcl").write_text("puts ok\n", encoding="utf-8")
     (library_dir / "README").write_text("test library\n", encoding="utf-8")
 
-    xschem = fake_bin / "xschem"
+    xschem = env_prefix / "bin" / "xschem"
     xschem.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     xschem.chmod(0o755)
     tclsh = env_prefix / "bin" / "tclsh"
@@ -1038,6 +1096,8 @@ def test_upstream_script_reports_structured_timeout_for_full_xschem_profile(tmp_
             source,
             "--env-prefix",
             env_prefix,
+            "--env-name",
+            "test-monata-env",
             "--profile",
             "full",
             "--timeout",
@@ -1050,8 +1110,13 @@ def test_upstream_script_reports_structured_timeout_for_full_xschem_profile(tmp_
     data = json.loads(result.stdout)
     xschem_result = data["profiles"]["xschem"]
     assert xschem_result["reason"] == "command-timeout"
-    assert xschem_result["checks"][0]["returncode"] == 124
-    assert "timed out after 1s" in xschem_result["checks"][0]["output"]
+    assert [check["id"] for check in xschem_result["checks"]] == [
+        "xschem-basic-create-save",
+        "xschem-full-regression",
+    ]
+    assert xschem_result["checks"][0]["returncode"] == 0
+    assert xschem_result["checks"][1]["returncode"] == 124
+    assert "timed out after 1s" in xschem_result["checks"][1]["output"]
 
 
 def test_plan_can_write_manifest_seed(tmp_path):
@@ -1462,6 +1527,61 @@ def test_execute_runbook_suggests_upstream_test_dependency_for_tclsh_missing(tmp
     assert summary["steps"][0]["next_actions"][0]["requires_user_input"] is True
     assert summary["steps"][0]["next_actions"][1]["requires_user_input"] is False
     assert "tclsh" in summary["steps"][0]["next_actions"][0]["prompt"]
+    assert "--upstream-profile basic" in summary["steps"][0]["next_actions"][1]["command"]
+
+
+def test_execute_runbook_suggests_full_regression_recovery_after_xschem_timeout(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    upstream_payload = {
+        "ok": False,
+        "profiles": {
+            "xschem": {
+                "ok": False,
+                "reason": "command-timeout",
+                "checks": [
+                    {"id": "xschem-basic-create-save", "returncode": 0, "output": "basic ok"},
+                    {
+                        "id": "xschem-full-regression",
+                        "returncode": 124,
+                        "output": "Start source create_save.tcl\n\ntimed out after 300s\n",
+                    },
+                ],
+            }
+        },
+    }
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "upstream_installed_tests",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            (
+                                "import json, sys; "
+                                f"print(json.dumps({upstream_payload!r})); "
+                                "sys.exit(1)"
+                            ),
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    action_ids = [action["id"] for action in summary["steps"][0]["next_actions"]]
+    assert action_ids[:2] == ["inspect-xschem-full-regression-timeout", "use-basic-upstream-profile"]
+    assert summary["steps"][0]["next_actions"][0]["requires_user_input"] is False
+    assert "xschem-full-regression" in summary["steps"][0]["next_actions"][0]["prompt"]
     assert "--upstream-profile basic" in summary["steps"][0]["next_actions"][1]["command"]
 
 

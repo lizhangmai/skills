@@ -184,6 +184,9 @@ def test_plan_reports_git_unavailable_for_local_source_validation(tmp_path):
     data = json.loads(result.stdout)
     assert data["local_sources"]["klayout"]["status"] == "git-unavailable"
     assert data["questions"][0]["id"] == "local_source_repair"
+    assert data["questions"][0]["problem_sources"]["klayout"]["status"] == "git-unavailable"
+    assert data["questions"][0]["problem_sources"]["klayout"]["path"] == str(klayout_source.resolve())
+    assert data["questions"][0]["problem_sources"]["klayout"]["target_ref"] == "v0.30.9"
 
 
 def test_plan_skips_build_when_existing_channel_has_local_source_packages(tmp_path):

@@ -836,11 +836,21 @@ def questions(local_sources):
         item["status"] in {"missing", "not-git", "target-ref-missing", "git-unavailable"}
         for item in local_sources.values()
     ):
+        problem_sources = {
+            package: {
+                "path": item.get("path", ""),
+                "status": item.get("status", ""),
+                "target_ref": item.get("target_ref"),
+            }
+            for package, item in local_sources.items()
+            if item["status"] in {"missing", "not-git", "target-ref-missing", "git-unavailable"}
+        }
         items.append(
             {
                 "id": "local_source_repair",
                 "question": "One or more local sources cannot be validated, or git is unavailable. Ask the user for a corrected path, tag, archive, or validation-capable container before building?",
                 "recommended": True,
+                "problem_sources": problem_sources,
             }
         )
     return items

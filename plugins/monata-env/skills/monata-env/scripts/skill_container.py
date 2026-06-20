@@ -13,6 +13,7 @@ from pathlib import Path
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SINGULARITY_BIN = "/opt/singularity-ce/4.1.1/bin/singularity"
 DEFAULT_IMAGE = "docker://python:3.12-slim"
+DEFAULT_CONTAINER_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 PREFLIGHT_SCRIPT = (
     "for command_name in \"$@\"; do "
     "command -v \"$command_name\" >/dev/null 2>&1 || printf '%s\\n' \"$command_name\"; "
@@ -54,7 +55,7 @@ def build_command(args, dirs, command=None):
     workspace = resolve_path(args.workspace)
     repo_root = resolve_path(args.repo_root)
     container_command = args.command if command is None else command
-    return [
+    singularity_command = [
         str(args.singularity_bin),
         "exec",
         "--cleanenv",
@@ -67,13 +68,23 @@ def build_command(args, dirs, command=None):
         f"{workspace}:/mnt/project",
         "--bind",
         f"{dirs['channel_dir']}:/tmp/skill-channel",
-        str(args.image),
-        "env",
+    ]
+    for bind in args.bind:
+        singularity_command.extend(["--bind", str(bind)])
+    container_env = [
         "HOME=/tmp/skill-home",
         "PIXI_HOME=/tmp/skill-home/.pixi",
         "XDG_CACHE_HOME=/tmp/skill-home/.cache",
         "RATTLER_CACHE_DIR=/tmp/skill-home/.cache/rattler",
         "CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel",
+    ]
+    if args.prepend_path:
+        container_env.append("PATH=" + ":".join(args.prepend_path + [DEFAULT_CONTAINER_PATH]))
+    return [
+        *singularity_command,
+        str(args.image),
+        "env",
+        *container_env,
         *[str(part) for part in container_command],
     ]
 
@@ -81,7 +92,7 @@ def build_command(args, dirs, command=None):
 def build_preflight_command(args, dirs):
     if not args.require_command:
         return []
-    return build_command(args, dirs, ["sh", "-lc", PREFLIGHT_SCRIPT, "preflight", *args.require_command])
+    return build_command(args, dirs, ["sh", "-c", PREFLIGHT_SCRIPT, "preflight", *args.require_command])
 
 
 def preflight_next_actions(text):
@@ -175,6 +186,13 @@ def parse_args():
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
     parser.add_argument("--state-dir", type=Path, help="Host directory for isolated HOME/cache/channel state.")
     parser.add_argument("--channel", type=Path, help="Host directory bound to /tmp/skill-channel.")
+    parser.add_argument("--bind", action="append", default=[], help="Additional Singularity bind spec, such as host:container:ro.")
+    parser.add_argument(
+        "--prepend-path",
+        action="append",
+        default=[],
+        help="Prepend this path inside the container PATH. Repeatable.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print the container command as JSON without executing it.")
     parser.add_argument(
         "--require-command",
@@ -201,6 +219,8 @@ def main():
         "command": command,
         "preflight_command": preflight_command,
         "required_commands": args.require_command,
+        "extra_binds": args.bind,
+        "prepend_path": args.prepend_path,
         "state_dir": str(dirs["state_dir"]),
         "home_dir": str(dirs["home_dir"]),
         "cache_dir": str(dirs["cache_dir"]),

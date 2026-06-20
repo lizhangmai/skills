@@ -73,7 +73,7 @@ def test_skill_container_dry_run_builds_isolated_singularity_command(tmp_path):
     assert data["required_commands"] == ["python3"]
     assert preflight_command[-5:] == [
         "sh",
-        "-lc",
+        "-c",
         "for command_name in \"$@\"; do command -v \"$command_name\" >/dev/null 2>&1 || printf '%s\\n' \"$command_name\"; done",
         "preflight",
         "python3",
@@ -158,6 +158,46 @@ def test_skill_container_dry_run_isolates_singularity_host_cache(tmp_path):
     assert data["host_env"]["SINGULARITY_TMPDIR"] == str((state_dir / "singularity-tmp").resolve())
     assert (state_dir / "singularity-cache").is_dir()
     assert (state_dir / "singularity-tmp").is_dir()
+
+
+def test_skill_container_dry_run_accepts_extra_binds_and_path_prefixes(tmp_path):
+    workspace = tmp_path / "workspace"
+    state_dir = tmp_path / "state"
+    host_tools = tmp_path / "host-tools"
+    workspace.mkdir()
+    host_tools.mkdir()
+
+    result = run(
+        [
+            sys.executable,
+            SCRIPT,
+            "--dry-run",
+            "--state-dir",
+            state_dir,
+            "--workspace",
+            workspace,
+            "--bind",
+            f"{host_tools}:/opt/host-tools:ro",
+            "--prepend-path",
+            "/opt/host-tools/bin",
+            "--require-command",
+            "pixi",
+            "--",
+            "pixi",
+            "--version",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    command = data["command"]
+    assert data["extra_binds"] == [f"{host_tools}:/opt/host-tools:ro"]
+    assert data["prepend_path"] == ["/opt/host-tools/bin"]
+    assert f"{host_tools}:/opt/host-tools:ro" in command
+    assert "PATH=/opt/host-tools/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" in command
+    assert "PATH=/opt/host-tools/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" in data[
+        "preflight_command"
+    ]
 
 
 def test_skill_container_preflight_reports_missing_required_commands(tmp_path):

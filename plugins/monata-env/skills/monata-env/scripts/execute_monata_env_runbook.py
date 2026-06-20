@@ -80,15 +80,28 @@ def dependency_skip(step, results_by_id, selected_ids, explicit_steps):
     return None
 
 
-def run_command(command, cwd=None):
-    return subprocess.run(
-        [str(part) for part in command],
-        cwd=str(cwd) if cwd else None,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
+def run_command(command, cwd=None, timeout=None):
+    command = [str(part) for part in command]
+    try:
+        return subprocess.run(
+            command,
+            cwd=str(cwd) if cwd else None,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        timeout_text = f"timed out after {timeout}s"
+        stderr = (stderr + "\n" + timeout_text).strip() + "\n"
+        return subprocess.CompletedProcess(command, 124, stdout=stdout, stderr=stderr)
 
 
 def write_stdout(step, stdout):
@@ -151,6 +164,15 @@ def next_actions_for_failure(step, item):
     text = output_text(item)
     step_id = step.get("id", "")
     actions = []
+    if "timed out after" in text:
+        actions.append(
+            {
+                "id": "inspect-timeout-or-cache",
+                "title": "Inspect timeout, network, or cache state",
+                "requires_user_input": True,
+                "prompt": "The runbook step timed out. Inspect the step log, then either retry with a larger timeout, provide a local package/source/cache fallback, or run a narrower step before continuing.",
+            }
+        )
     if "rattler_channel.py" in text or "no such file" in text or "can't open file" in text:
         actions.append(
             {
@@ -217,7 +239,7 @@ def execute_step(step, args, explicit_steps, results_by_id, selected_ids):
         item.update({"status": "dry-run", "command": [str(part) for part in step["command"]]})
         return item
 
-    result = run_command(step["command"], cwd=args.cwd)
+    result = run_command(step["command"], cwd=args.cwd, timeout=step.get("timeout_seconds"))
     stdout_path = write_stdout(step, result.stdout)
     stderr_path = write_stderr(step, result.stderr)
     record_result = run_record_after(step, result.returncode, cwd=args.cwd)

@@ -327,6 +327,7 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
     build_stdout = output_dir.resolve() / "monata-env-build.out"
     build_stderr = output_dir.resolve() / "monata-env-build.err"
     assert build_step["recommended"] is True
+    assert build_step["timeout_seconds"] == 7200
     assert build_step["command"] == data["commands"]["build"]
     assert build_step["stdout_path"] == str(build_stdout)
     assert build_step["stderr_path"] == str(build_stderr)
@@ -344,6 +345,7 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
 
     install_step = runbook["install"]
     assert install_step["depends_on"] == ["build"]
+    assert install_step["timeout_seconds"] == 1800
     assert install_step["stdout_path"] == str(output_dir.resolve() / "monata-env-install.out")
     assert install_step["stderr_path"] == str(output_dir.resolve() / "monata-env-install.err")
     assert install_step["record_after"]["returncode_var"] == "INSTALL_RC"
@@ -351,6 +353,7 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
 
     smoke_step = runbook["smoke"]
     assert smoke_step["depends_on"] == ["install"]
+    assert smoke_step["timeout_seconds"] == 600
     smoke_json = output_dir.resolve() / "monata-env-smoke.json"
     smoke_stderr = output_dir.resolve() / "monata-env-smoke.err"
     assert smoke_step["stdout_path"] == str(smoke_json)
@@ -868,6 +871,42 @@ def test_execute_runbook_suggests_tool_inspection_for_smoke_failure(tmp_path):
     assert action["id"] == "inspect-installed-tools"
     assert action["requires_user_input"] is False
     assert "smoke_monata_env_tools.py" in action["command"]
+
+
+def test_execute_runbook_times_out_step_and_suggests_timeout_recovery(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "install",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "timeout_seconds": 1,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import time; time.sleep(10)",
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    step = summary["steps"][0]
+    assert step["status"] == "executed"
+    assert step["returncode"] == 124
+    assert "timed out after 1s" in step["stderr"]
+    assert step["next_actions"][0]["id"] == "inspect-timeout-or-cache"
+    assert step["next_actions"][0]["requires_user_input"] is True
 
 
 def test_record_manifest_appends_command_and_verification_payload(tmp_path):

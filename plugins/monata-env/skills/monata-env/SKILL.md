@@ -154,6 +154,9 @@ directory.
    `stdout_path` and `stderr_path` logs should be captured, and a
    `record_after` command that must run after the step so the manifest keeps
    return codes, log file paths, package artifacts, and verification payloads.
+   Each mutating or long-running runbook step has `timeout_seconds`; if a step
+   times out, inspect the persisted stdout/stderr logs and use the executor's
+   `next_actions` before retrying with a larger timeout or a local cache.
    Review the plan's `questions`. Ask the user before doing a
    recommended fallback such as creating temporary detached worktrees,
    installing missing host tools, or writing to the pixi global environment.
@@ -496,7 +499,28 @@ Use live checks in tiers:
   the package channel.
 - Install/smoke tier: requires a container image with `pixi` and enough runtime
   libraries for the tools. Keep this tier separate from planner/channel checks
-  until the selected image passes `--require-command pixi`.
+  until the selected image passes `--require-command pixi`. For a local smoke
+  validation where a trusted host pixi binary is already available, bind the
+  host pixi install read-only and prepend its bin directory while keeping
+  `PIXI_HOME` in `/tmp/skill-home`:
+
+  ```bash
+  python scripts/skill_container.py \
+    --state-dir /tmp/monata-env-install-test \
+    --repo-root "<skills-repo>" \
+    --workspace "<project-workspace>" \
+    --channel "$CONDA_BUILD_OUTPUT_DIR" \
+    --image /path/to/monata-env-python-3.12-slim.sif \
+    --bind "<host-pixi-root>:/opt/host-pixi:ro" \
+    --prepend-path /opt/host-pixi/bin \
+    --require-command python3 \
+    --require-command pixi \
+    -- \
+    bash -c 'cd /mnt/project && python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/execute_monata_env_runbook.py --manifest /tmp/skill-home/monata-env-session/monata-env-install-manifest.json --step install --step smoke --allow-confirmation-required --format json'
+  ```
+
+  Use `bash -c`, not `bash -lc`, when relying on a prepended PATH; login shells
+  may reset PATH and hide the bound pixi binary.
 
 ## Feedback Protocol
 

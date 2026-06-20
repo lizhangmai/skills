@@ -23,6 +23,7 @@
       "--expose xschem=xschem",
       "klayout=0.30.9",
       "xschem=3.4.7",
+      "execute_monata_env_runbook.py",
       "plan_monata_env.py",
       "runbook",
       "record_after",
@@ -34,6 +35,7 @@
     "installed_files": [
       "SKILL.md",
       "scripts/detect_monata_tools.py",
+      "scripts/execute_monata_env_runbook.py",
       "scripts/plan_monata_env.py",
       "scripts/record_monata_env_session.py",
       "scripts/smoke_monata_env_tools.py",

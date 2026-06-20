@@ -11,6 +11,9 @@ SMOKE_SCRIPT = REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / 
 UPSTREAM_SCRIPT = (
     REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "test_monata_env_upstream.py"
 )
+EXECUTE_SCRIPT = (
+    REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "execute_monata_env_runbook.py"
+)
 RECORD_SCRIPT = (
     REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "record_monata_env_session.py"
 )
@@ -395,6 +398,115 @@ def test_plan_can_write_manifest_seed(tmp_path):
     assert data["execution"]["commands_run"] == []
     assert data["verification"]["smoke"] is None
     assert data["verification"]["upstream_installed"] is None
+
+
+def test_execute_runbook_captures_stdout_and_records_verification(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    plan_path = tmp_path / "plan.json"
+    smoke_json = tmp_path / "channel" / "smoke.json"
+    payload = {"ok": True, "tools": {"ngspice": {"ok": True}}}
+    write_manifest_seed(manifest)
+    command = [
+        sys.executable,
+        "-c",
+        "import json; print(json.dumps({'ok': True, 'tools': {'ngspice': {'ok': True}}}))",
+    ]
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "smoke",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": command,
+                        "stdout_path": str(smoke_json),
+                        "record_after": {
+                            "returncode_var": "SMOKE_RC",
+                            "command": [
+                                sys.executable,
+                                str(RECORD_SCRIPT),
+                                "--manifest",
+                                str(manifest),
+                                "--command-kind",
+                                "smoke",
+                                "--command",
+                                "python smoke",
+                                "--returncode",
+                                "$SMOKE_RC",
+                                "--stdout-file",
+                                str(smoke_json),
+                                "--verification",
+                                f"smoke={smoke_json}",
+                            ],
+                        },
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 0, result.stdout
+    summary = json.loads(result.stdout)
+    assert summary["ok"] is True
+    assert summary["steps"][0]["id"] == "smoke"
+    assert summary["steps"][0]["returncode"] == 0
+    assert summary["steps"][0]["record_returncode"] == 0
+    assert smoke_json.exists()
+    manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert manifest_data["verification"]["smoke"] == payload
+    assert manifest_data["execution"]["commands_run"][0]["returncode"] == 0
+
+
+def test_execute_runbook_requires_confirmation_for_mutating_steps(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    marker = tmp_path / "mutated.txt"
+    command = [sys.executable, "-c", f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')"]
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "install",
+                        "recommended": True,
+                        "requires_confirmation": True,
+                        "command": command,
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    skipped = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert skipped.returncode == 0, skipped.stdout
+    skipped_summary = json.loads(skipped.stdout)
+    assert skipped_summary["steps"][0]["status"] == "skipped"
+    assert skipped_summary["steps"][0]["reason"] == "requires-confirmation"
+    assert not marker.exists()
+
+    executed = run(
+        [
+            sys.executable,
+            EXECUTE_SCRIPT,
+            "--plan",
+            plan_path,
+            "--allow-confirmation-required",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert executed.returncode == 0, executed.stdout
+    executed_summary = json.loads(executed.stdout)
+    assert executed_summary["steps"][0]["status"] == "executed"
+    assert marker.read_text(encoding="utf-8") == "ran"
 
 
 def test_record_manifest_appends_command_and_verification_payload(tmp_path):

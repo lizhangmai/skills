@@ -16,6 +16,7 @@
     "skill_must_contain": [
       "AI-native setup",
       "scripts/plan_monata_env.py",
+      "scripts/execute_monata_env_runbook.py",
       "--write-manifest",
       "plan.decisions",
       "plan.runbook",
@@ -37,6 +38,7 @@
     "installed_files": [
       "SKILL.md",
       "scripts/detect_monata_tools.py",
+      "scripts/execute_monata_env_runbook.py",
       "scripts/plan_monata_env.py",
       "scripts/record_monata_env_session.py",
       "scripts/skill_container.py",

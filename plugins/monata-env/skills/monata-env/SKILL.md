@@ -131,6 +131,27 @@ directory.
    worktrees, installing missing host tools, or writing to the pixi global
    environment.
 
+   Prefer the executor for runbook steps instead of manually retyping commands:
+
+   ```bash
+   python scripts/execute_monata_env_runbook.py \
+     --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+     --format json
+   ```
+
+   By default this runs only recommended steps that do not require
+   confirmation. After the user approves mutating steps such as build or pixi
+   global install, run the selected steps explicitly:
+
+   ```bash
+   python scripts/execute_monata_env_runbook.py \
+     --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+     --step build \
+     --step install \
+     --allow-confirmation-required \
+     --format json
+   ```
+
 5. Detect the required circuit-tool packages from the Monata workspace when you
    need a shell list outside the planner:
 
@@ -287,11 +308,12 @@ directory.
    test tree. Use `--profile full` only when the user accepts longer runtime
    and higher dependency/display risk.
 
-12. Use the planner's `runbook[*].record_after` commands after build, install,
-   smoke, and upstream test commands. If you must execute a command outside the
-   planner output, call `scripts/record_monata_env_session.py` directly. The
-   manifest must keep the plan JSON, exact commands run, package artifacts,
-   local-source refs, pixi global environment name, `verification.smoke`, and
+12. Prefer `scripts/execute_monata_env_runbook.py` so `runbook[*].record_after`
+   runs automatically after build, install, smoke, and upstream test commands.
+   If you must execute a command outside the planner output, call
+   `scripts/record_monata_env_session.py` directly. The manifest must keep the
+   plan JSON, exact commands run, package artifacts, local-source refs, pixi
+   global environment name, `verification.smoke`, and
    `verification.upstream_installed` when run.
 
    After a build command, record generated artifacts without requiring

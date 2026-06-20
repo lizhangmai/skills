@@ -396,7 +396,7 @@ def evidence(manifest, recommendation, live):
     }
 
 
-def next_actions(requirements, recommendation):
+def next_actions(requirements, recommendation, manifest_path=None):
     actions = []
     by_id = {item["id"]: item for item in requirements}
     live = by_id.get("live-monata-env")
@@ -449,11 +449,42 @@ def next_actions(requirements, recommendation):
         )
     artifact_requirement = by_id.get("package-artifacts-recorded")
     if artifact_requirement and not artifact_requirement["ok"]:
+        command = "python scripts/execute_monata_env_runbook.py --manifest <manifest> --step check_channel --format json"
+        if manifest_path:
+            command = (
+                "python scripts/execute_monata_env_runbook.py "
+                f"--manifest {shlex.quote(str(manifest_path))} --step check_channel --format json"
+            )
         actions.append(
             {
                 "id": "record-package-artifacts",
                 "title": "Record local channel package artifacts",
                 "requires_user_input": False,
+                "command": command,
+                "evidence": {
+                    "missing_packages": artifact_requirement.get("missing", []),
+                    "present_packages": artifact_requirement.get("present", []),
+                    "manifest": str(manifest_path) if manifest_path else "",
+                },
+                "decision": {
+                    "id": "artifact_evidence_repair",
+                    "prompt": "How should missing package artifact evidence be repaired?",
+                    "default": "record_existing_channel",
+                    "options": [
+                        {
+                            "id": "record_existing_channel",
+                            "label": "Record existing channel",
+                            "requires_user_input": False,
+                            "effect": "Run the check_channel step so record_after captures artifacts already present in the local channel.",
+                        },
+                        {
+                            "id": "build_missing_packages",
+                            "label": "Build missing packages",
+                            "requires_user_input": True,
+                            "effect": "Run the build step when artifacts are not present in the local channel.",
+                        },
+                    ],
+                },
                 "prompt": "The manifest is missing package artifact evidence. Run the check_channel or build runbook step so record_after captures ngspice/openvaf-r/KLayout/Xschem artifacts from the local channel.",
             }
         )
@@ -483,7 +514,7 @@ def audit(manifest_path, check_live=False, require_artifacts=False):
         requirements.append(live_state_requirement(manifest))
     recommendation = upstream_recommendation(manifest)
     ok = all(item["ok"] for item in requirements)
-    actions = next_actions(requirements, recommendation)
+    actions = next_actions(requirements, recommendation, manifest_path=manifest_path)
     status = "ready" if ok else "blocked"
     live = next((item for item in requirements if item["id"] == "live-monata-env"), None)
     verification = verification_status(manifest, recommendation, live)

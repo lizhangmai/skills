@@ -309,6 +309,15 @@ directory.
    refreshing the conda-build helper, creating a detached source worktree at
    the required tag, or inspecting missing exposed tool commands after smoke
    failure.
+   Each `next_actions[]` item must be treated as a machine-readable negotiation
+   object: `id`, `title`, `requires_user_input`, and `prompt` are required;
+   `command` is a concrete next command when available; `evidence` names the
+   failed step, return codes, logs, missing packages, or manifest path; and
+   `decision` contains `id`, `prompt`, `default`, and ordered `options` when
+   the user must choose between local sources, source archives, retrying the
+   network, creating a detached worktree, or building missing packages. Present
+   the `decision.options` to the user instead of reducing the failure to a raw
+   log paste.
    The final `audit` runbook step calls
    `scripts/audit_monata_env_manifest.py --check-live`; it reads the manifest,
    checks current PATH shims plus `pixi global list --json`, and reports

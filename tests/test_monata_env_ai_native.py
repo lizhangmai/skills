@@ -1735,6 +1735,11 @@ def test_execute_runbook_suggests_local_sources_after_network_failure(tmp_path):
     assert action["id"] == "provide-local-source"
     assert action["requires_user_input"] is True
     assert "local KLayout/Xschem source checkout" in action["prompt"]
+    assert action["evidence"]["step_id"] == "build"
+    assert action["decision"]["id"] == "source_fallback"
+    assert action["decision"]["default"] == "provide_local_source"
+    option_ids = [option["id"] for option in action["decision"]["options"]]
+    assert option_ids == ["provide_local_source", "provide_source_archive", "retry_network"]
     assert summary["next_actions"][0]["id"] == "provide-local-source"
 
 
@@ -1800,6 +1805,14 @@ def test_execute_runbook_suggests_worktree_for_source_ref_mismatch(tmp_path):
     assert action["id"] == "create-versioned-source-worktree"
     assert action["requires_user_input"] is True
     assert "detached worktree" in action["prompt"]
+    assert action["evidence"]["step_id"] == "build"
+    assert action["decision"]["id"] == "local_source_ref_repair"
+    assert action["decision"]["default"] == "create_detached_worktree"
+    assert [option["id"] for option in action["decision"]["options"]] == [
+        "create_detached_worktree",
+        "provide_corrected_source",
+        "provide_source_archive",
+    ]
 
 
 def test_execute_runbook_suggests_tool_inspection_for_smoke_failure(tmp_path):
@@ -2209,7 +2222,13 @@ def test_audit_manifest_can_require_package_artifacts(tmp_path):
     assert data["status"] == "blocked"
     assert requirements["package-artifacts-recorded"]["ok"] is False
     assert requirements["package-artifacts-recorded"]["missing"] == ["ngspice", "openvaf-r", "klayout", "xschem"]
-    assert data["next_actions"][0]["id"] == "record-package-artifacts"
+    action = data["next_actions"][0]
+    assert action["id"] == "record-package-artifacts"
+    assert "execute_monata_env_runbook.py" in action["command"]
+    assert "--step check_channel" in action["command"]
+    assert action["evidence"]["missing_packages"] == ["ngspice", "openvaf-r", "klayout", "xschem"]
+    assert action["decision"]["id"] == "artifact_evidence_repair"
+    assert action["decision"]["default"] == "record_existing_channel"
 
 
 def test_plan_final_audit_requires_package_artifact_evidence(tmp_path):

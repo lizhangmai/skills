@@ -240,6 +240,13 @@ def next_actions_for_failure(step, item):
 
     text = output_text(item)
     step_id = step.get("id", "")
+    evidence = {
+        "step_id": step_id,
+        "returncode": item.get("returncode"),
+        "record_returncode": item.get("record_returncode"),
+        "stdout_path": item.get("stdout_path", ""),
+        "stderr_path": item.get("stderr_path", ""),
+    }
     actions = payload_next_actions(item)
     if step_id == "upstream_installed_tests" and "xschem-full-regression" in text and "timed out after" in text:
         rerun_command = upstream_rerun_command(step, 900)
@@ -286,6 +293,32 @@ def next_actions_for_failure(step, item):
                 "id": "create-versioned-source-worktree",
                 "title": "Use a source checkout at the recipe version",
                 "requires_user_input": True,
+                "evidence": evidence,
+                "decision": {
+                    "id": "local_source_ref_repair",
+                    "prompt": "How should the local source ref mismatch be repaired?",
+                    "default": "create_detached_worktree",
+                    "options": [
+                        {
+                            "id": "create_detached_worktree",
+                            "label": "Create detached worktree",
+                            "requires_user_input": True,
+                            "effect": "Keeps the user's current checkout untouched and builds from the recipe tag.",
+                        },
+                        {
+                            "id": "provide_corrected_source",
+                            "label": "Provide corrected checkout",
+                            "requires_user_input": True,
+                            "effect": "Use a user-provided local checkout already at the required upstream ref.",
+                        },
+                        {
+                            "id": "provide_source_archive",
+                            "label": "Provide source archive",
+                            "requires_user_input": True,
+                            "effect": "Build from a trusted local archive when git ref validation is not possible.",
+                        },
+                    ],
+                },
                 "prompt": "The provided source checkout is not at the required upstream ref. Ask whether to create a detached worktree at the required tag or provide a corrected local source path.",
             }
         )
@@ -295,6 +328,32 @@ def next_actions_for_failure(step, item):
                 "id": "provide-local-source",
                 "title": "Use local upstream source checkouts",
                 "requires_user_input": True,
+                "evidence": evidence,
+                "decision": {
+                    "id": "source_fallback",
+                    "prompt": "How should upstream sources be provided after the network failure?",
+                    "default": "provide_local_source",
+                    "options": [
+                        {
+                            "id": "provide_local_source",
+                            "label": "Provide local checkout",
+                            "requires_user_input": True,
+                            "effect": "Re-run the planner with --local-source package=/path for KLayout and/or Xschem.",
+                        },
+                        {
+                            "id": "provide_source_archive",
+                            "label": "Provide source archive",
+                            "requires_user_input": True,
+                            "effect": "Use a trusted local tar/zip archive when a checkout is unavailable.",
+                        },
+                        {
+                            "id": "retry_network",
+                            "label": "Retry network fetch",
+                            "requires_user_input": False,
+                            "effect": "Retry the build after network/cache/proxy access is restored.",
+                        },
+                    ],
+                },
                 "prompt": "Network source download failed. Ask the user for a local KLayout/Xschem source checkout or archive path, then re-run the planner with --local-source.",
             }
         )

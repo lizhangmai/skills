@@ -19,6 +19,7 @@
       "--package xschem",
       "--expose xschem=xschem",
       "xschem=3.4.7",
+      "smoke_monata_env_tools.py",
       "xschem --version"
     ]
   }

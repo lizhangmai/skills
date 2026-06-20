@@ -23,14 +23,16 @@
       "--expose xschem=xschem",
       "klayout=0.30.9",
       "xschem=3.4.7",
-      "ngspice --version",
-      "openvaf-r --help",
-      "klayout -v",
-      "xschem --version"
+      "plan_monata_env.py",
+      "smoke_monata_env_tools.py",
+      "monata-env-install-manifest.json"
     ],
     "installed_files": [
       "SKILL.md",
-      "scripts/detect_monata_tools.py"
+      "scripts/detect_monata_tools.py",
+      "scripts/plan_monata_env.py",
+      "scripts/smoke_monata_env_tools.py",
+      "scripts/test_monata_env_upstream.py"
     ]
   }
 }

@@ -11,6 +11,11 @@ Create or update a pixi global environment named `monata-env` that exposes the
 circuit tools used by Monata projects. The default tool set is `ngspice`,
 `openvaf-r`, `klayout`, and `xschem`.
 
+This is an AI-native setup skill: inspect first, produce a small explicit plan,
+ask for user confirmation only when the plan touches global state or needs a
+fallback choice, execute deterministic helper commands, verify tools directly,
+and leave a manifest of what was installed.
+
 This skill intentionally does not install the Monata package while Monata is
 still under active development. It may install Python, Ruby, Qt, and other
 runtime dependencies needed by tools such as KLayout. It keeps tooling reusable
@@ -42,14 +47,26 @@ directory.
 - Build the smallest package set needed for the requested Monata workflow. The
   current Monata baseline is `ngspice`, `openvaf-r`, `klayout`, and
   `xschem`.
+- Start with `scripts/plan_monata_env.py` for nontrivial setup requests. Treat
+  its JSON as the session plan: detected packages, channel reuse, local-source
+  status, recommended commands, test profiles, user-confirmation questions, and
+  manifest path.
 - Build KLayout from the public upstream source
   `https://github.com/KLayout/klayout/tree/v0.30.9` through the bundled
   `klayout` recipe. Keep the recipe source remote, pinned to the `v0.30.9`
-  commit, and checksum-verified; do not depend on a local KLayout checkout.
+  commit, and checksum-verified by default.
 - Build Xschem from the public upstream source
   `https://codeberg.org/stef_xschem/xschem/src/tag/3.4.7` through the bundled
   `xschem` recipe. Keep the recipe source remote, pinned to the `3.4.7`
-  commit, and checksum-verified; do not depend on a local Xschem checkout.
+  commit, and checksum-verified by default.
+- If the user explicitly provides a local source checkout for KLayout or
+  Xschem, pass it to the conda-build helper with `--local-source`. The helper
+  must create a temporary `source.path` overlay recipe and still use
+  `rattler-build build --output-dir`; do not hand-copy `.conda` files into the
+  channel and do not require `conda index`. Treat local source as trusted user
+  input and confirm it is checked out to the requested upstream version
+  (`v0.30.9` for KLayout, `3.4.7` for Xschem) before building. Pass
+  `--local-source-ref package=ref` so the helper enforces this check.
 - If the user-provided channel already contains the detected packages, skip the
   build and do not require `rattler-build`.
 - Do not build every circuit-toolchain package, run `--all`, or build the Xyce
@@ -81,7 +98,34 @@ directory.
    export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
    ```
 
-4. Detect the required circuit-tool packages from the Monata workspace:
+4. Generate an AI-native setup plan before mutating global state:
+
+   ```bash
+   python scripts/plan_monata_env.py \
+     --root "<project-workspace>" \
+     --output-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --write-manifest \
+     --format json
+   ```
+
+   If the user provided local upstream checkouts, add one argument per source:
+
+   ```bash
+   python scripts/plan_monata_env.py \
+     --root "<project-workspace>" \
+     --output-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --local-source klayout="$(realpath ../circuit/klayout)" \
+     --local-source xschem="$(realpath ../circuit/xschem)" \
+     --write-manifest \
+     --format json
+   ```
+
+   Review the plan's `questions`. Ask the user before doing a recommended
+   fallback such as creating temporary detached worktrees, installing missing
+   host tools, or writing to the pixi global environment.
+
+5. Detect the required circuit-tool packages from the Monata workspace when you
+   need a shell list outside the planner:
 
    ```bash
    python scripts/detect_monata_tools.py --root "<project-workspace>" --format shell
@@ -91,7 +135,7 @@ directory.
    Monata workspace cannot be inspected, use the current baseline package set:
    `ngspice openvaf-r klayout xschem`.
 
-5. Resolve the conda-build helper. Prefer a local sibling checkout:
+6. Resolve the conda-build helper. Prefer a local sibling checkout:
 
    ```text
    plugins/conda-build/skills/conda-build/scripts/rattler_channel.py
@@ -107,7 +151,7 @@ directory.
 
    If the checkout already exists, run `git -C ... pull --ff-only`.
 
-6. Check the user-provided channel. If all detected packages are present, skip
+7. Check the user-provided channel. If all detected packages are present, skip
    the build step:
 
    ```bash
@@ -123,17 +167,38 @@ directory.
    output instead of hard-coding this list when the workspace indicates a
    different package set.
 
-7. If any detected package is missing, build only missing work from the
-   `circuit-toolchain` recipe set and let existing artifacts be reused:
+8. If any detected package is missing, build only missing work from the
+   `circuit-toolchain` recipe set and let existing artifacts be reused. When
+   the user gave local source directories, resolve them to absolute paths and
+   pass one `--local-source package=path` argument per local checkout:
 
    ```bash
+   KLAYOUT_SOURCE="$(realpath ../circuit/klayout)"
+   XSCHEM_SOURCE="$(realpath ../circuit/xschem)"
    python scripts/rattler_channel.py build \
      --recipe-set circuit-toolchain \
      --package ngspice \
      --package openvaf-r \
      --package klayout \
      --package xschem \
+     --local-source klayout="$KLAYOUT_SOURCE" \
+     --local-source-ref klayout=v0.30.9 \
+     --local-source xschem="$XSCHEM_SOURCE" \
+     --local-source-ref xschem=3.4.7 \
      --skip-existing
+   ```
+
+   Omit `--local-source klayout=...` and `--local-source xschem=...` when the
+   user did not provide local source checkouts; the bundled recipes then fetch
+   pinned public sources from the network.
+
+   If a provided checkout is not currently at the recipe version, do not change
+   the user's checkout in place. Create a temporary detached worktree at the
+   target tag and pass that worktree path:
+
+   ```bash
+   git -C ../circuit/klayout worktree add --detach /tmp/monata-sources/klayout-v0.30.9 v0.30.9
+   git -C ../circuit/xschem worktree add --detach /tmp/monata-sources/xschem-3.4.7 3.4.7
    ```
 
    If `rattler-build` is missing but `pixi` is available, ask before installing
@@ -144,7 +209,7 @@ directory.
    rattler-build --version
    ```
 
-8. Install the detected circuit tools into the pixi global environment named
+9. Install the detected circuit tools into the pixi global environment named
    `monata-env`. Put the local channel first, then conda-forge:
 
    ```bash
@@ -162,14 +227,37 @@ directory.
    indicates a different package set. Expose each installed executable with the
    same command name unless the user asks for a specific alias.
 
-9. Verify the exposed circuit tools directly. Do not import `monata`:
+10. Verify the exposed circuit tools directly. Do not import `monata`:
 
    ```bash
-   ngspice --version
-   openvaf-r --help
-   klayout -v
-   xschem --version
+   python scripts/smoke_monata_env_tools.py --format json
    ```
+
+   This minimal smoke test runs `ngspice`, compiles small OSDI models with
+   `openvaf-r`, writes a GDS in KLayout batch mode, and checks `xschem --version`.
+
+11. If the plan recommends `test_profiles.upstream_installed` and the user
+   provided trusted local upstream checkouts, ask before running the optional
+   upstream-installed profile:
+
+   ```bash
+   python scripts/test_monata_env_upstream.py \
+     --format json \
+     --profile basic \
+     --klayout-source "$(realpath ../circuit/klayout)" \
+     --xschem-source "$(realpath ../circuit/xschem)"
+   ```
+
+   This profile uses upstream test assets but calls the installed tools. The
+   basic profile runs a small KLayout upstream script/Python-binding subset and
+   an Xschem upstream `create_save` test from a temporary copy of the source
+   test tree. Use `--profile full` only when the user accepts longer runtime
+   and higher dependency/display risk.
+
+12. Write or update `monata-env-install-manifest.json` in the output channel or
+   another user-approved report directory. Include the plan JSON, exact
+   commands run, package artifacts, local-source refs, pixi global environment
+   name, smoke-test JSON, and upstream-installed test JSON when run.
 
 ## Existing Circuit-Tool Environment
 
@@ -177,10 +265,7 @@ If the detected circuit tools are already available on `PATH`, still verify
 the commands directly and report that no pixi global install was needed:
 
 ```bash
-ngspice --version
-openvaf-r --help
-klayout -v
-xschem --version
+python scripts/smoke_monata_env_tools.py --format json
 ```
 
 Use this shortcut only when all required executables are already on `PATH`.

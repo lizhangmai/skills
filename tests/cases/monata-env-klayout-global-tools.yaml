@@ -19,7 +19,8 @@
       "--package klayout",
       "--expose klayout=klayout",
       "klayout=0.30.9",
-      "klayout -v"
+      "smoke_monata_env_tools.py",
+      "writes a GDS in KLayout batch mode"
     ]
   }
 }

@@ -21,8 +21,8 @@ description: Manage local self-use conda channels and conda package supply-chain
 - Use `https://prefix.dev/conda-forge` as the default dependency channel unless explicit `--channel` values are given.
 - When building for a Monata runtime environment, build only the packages the
   requested workflow needs. The current Monata baseline is `ngspice`,
-  `openvaf-r`, and `klayout`; do not use `--all` or `--up-to xyce` unless
-  explicitly asked.
+  `openvaf-r`, `klayout`, and `xschem`; do not use `--all` or `--up-to xyce`
+  unless explicitly asked.
 - Keep third-party sources outside the skill. Recipes should fetch public upstream `git` or `url` sources with pinned revisions or checksums.
 - Do not publish, upload, or authenticate against remote channels unless the user explicitly asks for that target and provides the needed credentials or trusted environment.
 - Read `references/legal-boundaries.md` before advising on redistribution, bundling, or license compatibility.
@@ -53,9 +53,9 @@ Render or build the current Monata baseline from the bundled recipe set:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
-python scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout
-python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout --render-only
-python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout --skip-existing
+python scripts/rattler_channel.py check-channel --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout --package xschem
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout --package xschem --render-only
+python scripts/rattler_channel.py build --recipe-set circuit-toolchain --package ngspice --package openvaf-r --package klayout --package xschem --skip-existing
 ```
 
 If `rattler-build` is missing and the user approves installing the build tool

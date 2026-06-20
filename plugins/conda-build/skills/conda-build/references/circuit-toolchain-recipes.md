@@ -39,6 +39,29 @@ export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 
 The wrapper writes artifacts to explicit `--output-dir`, `$CONDA_BUILD_OUTPUT_DIR`, or `$CONDA_BLD_PATH`. It does not choose a default final channel. It can check whether selected artifacts already exist in that channel before building. It solves dependencies from `https://prefix.dev/conda-forge`.
 
+For network-constrained users who already have trusted local upstream checkouts,
+the wrapper can build bundled recipes with temporary local-source overlays:
+
+```bash
+python scripts/rattler_channel.py build \
+  --recipe-set circuit-toolchain \
+  --package klayout \
+  --package xschem \
+  --local-source klayout="/abs/path/to/klayout" \
+  --local-source-ref klayout=v0.30.9 \
+  --local-source xschem="/abs/path/to/xschem" \
+  --local-source-ref xschem=3.4.7
+```
+
+`--local-source package=path` replaces only the temporary build recipe's
+`source:` block with `source.path`. The committed public recipes stay pinned to
+remote upstream sources and checksums. The local checkout is trusted user input
+and must already be checked out to the recipe's intended upstream version. Use
+`--local-source-ref package=ref` to make the helper reject a checkout whose
+`HEAD` does not match the expected tag or revision. Artifacts must still be
+produced by `rattler-build build --output-dir`; do not hand-copy packages into
+a channel.
+
 The installed-artifact smoke-test wrapper is:
 
 ```bash
@@ -136,6 +159,8 @@ boost -> adms -> trilinos-14.4.0 -> ngspice -> openvaf-r -> klayout -> xschem ->
 
 - Pin upstream source with public `git` URLs and fixed `rev` values or release tarballs with checksums.
 - Do not use `source.path` pointing to local `src/` trees in public recipes.
+  Use the wrapper's `--local-source package=path` overlay for explicit local
+  checkout builds.
 - Do not use private channel paths, NAS paths, or machine-specific prefixes.
 - Prefer changing recipe dependencies, compiler pins, and build flags over patching upstream source.
 - If a patch is required, keep it next to the recipe and document why it is needed.

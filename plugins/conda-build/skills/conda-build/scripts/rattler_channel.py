@@ -7,6 +7,7 @@ import os
 import shutil
 import shlex
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -105,6 +106,120 @@ def package_artifacts(output_dir, package_name):
     for pattern in ("{}-*.conda".format(package_name), "{}-*.tar.bz2".format(package_name)):
         artifacts.extend(path for path in output_dir.rglob(pattern) if path.is_file())
     return sorted(set(artifacts))
+
+
+def parse_local_sources(recipe_set, values):
+    local_sources = {}
+    for value in values or []:
+        if "=" not in value:
+            raise SystemExit("--local-source must use package=path syntax: {}".format(value))
+        package, source = value.split("=", 1)
+        package = normalize_package(recipe_set, package.strip())
+        if not package:
+            raise SystemExit("--local-source package name cannot be empty")
+        source_path = Path(source).expanduser().resolve()
+        if not source_path.exists():
+            raise SystemExit("Local source path does not exist for {}: {}".format(package, source_path))
+        local_sources[package] = source_path
+    return local_sources
+
+
+def parse_local_source_refs(recipe_set, values):
+    local_source_refs = {}
+    for value in values or []:
+        if "=" not in value:
+            raise SystemExit("--local-source-ref must use package=ref syntax: {}".format(value))
+        package, ref = value.split("=", 1)
+        package = normalize_package(recipe_set, package.strip())
+        ref = ref.strip()
+        if not package:
+            raise SystemExit("--local-source-ref package name cannot be empty")
+        if not ref:
+            raise SystemExit("--local-source-ref ref cannot be empty for {}".format(package))
+        local_source_refs[package] = ref
+    return local_source_refs
+
+
+def git_commit(path, ref):
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--verify", "{}^{{commit}}".format(ref)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def validate_local_source_refs(local_sources, local_source_refs):
+    missing_sources = sorted(set(local_source_refs) - set(local_sources))
+    if missing_sources:
+        raise SystemExit(
+            "--local-source-ref provided without --local-source for package(s): {}".format(
+                ", ".join(missing_sources)
+            )
+        )
+    for package, ref in sorted(local_source_refs.items()):
+        source_path = local_sources[package]
+        head = git_commit(source_path, "HEAD")
+        if head is None:
+            raise SystemExit(
+                "Local source for {} is not a git checkout or HEAD is unavailable: {}".format(
+                    package, source_path
+                )
+            )
+        target = git_commit(source_path, ref)
+        if target is None:
+            raise SystemExit(
+                "Local source for {} does not contain required ref {}: {}".format(
+                    package, ref, source_path
+                )
+            )
+        if head != target:
+            raise SystemExit(
+                "Local source for {} at {} HEAD {} does not match required ref {} ({})".format(
+                    package, source_path, head, ref, target
+                )
+            )
+
+
+def quote_yaml_string(value):
+    return json.dumps(str(value))
+
+
+def replace_source_block(text, source_path):
+    lines = text.splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        if line == "source:":
+            start = index
+            break
+    if start is None:
+        raise SystemExit("Recipe is missing a top-level source block")
+
+    end = start + 1
+    while end < len(lines):
+        line = lines[end]
+        if line and not line.startswith((" ", "\t", "#")):
+            break
+        end += 1
+
+    replacement = [
+        "source:",
+        "  path: {}".format(quote_yaml_string(source_path)),
+    ]
+    return "\n".join(lines[:start] + replacement + lines[end:]) + "\n"
+
+
+def local_source_recipe(root, package, source_path, temp_root):
+    original = root / package
+    overlay = temp_root / package
+    shutil.copytree(original, overlay)
+    recipe = overlay / "recipe.yaml"
+    recipe.write_text(replace_source_block(recipe.read_text(encoding="utf-8"), source_path), encoding="utf-8")
+    return overlay
 
 
 def rattler_command(args):
@@ -240,10 +355,14 @@ def cmd_build(args):
     require_rattler_build(args)
     env = build_environment(args)
     selected_paths = [path.resolve() for path in args.recipe_path or []]
+    local_sources = parse_local_sources(args.recipe_set, args.local_source)
+    local_source_refs = parse_local_source_refs(args.recipe_set, args.local_source_ref)
 
     if args.recipe_path:
-        if args.all or args.up_to or args.package:
-            raise SystemExit("--recipe-path cannot be combined with --package, --all, or --up-to")
+        if args.all or args.up_to or args.package or local_sources or local_source_refs:
+            raise SystemExit(
+                "--recipe-path cannot be combined with --package, --all, --up-to, --local-source, or --local-source-ref"
+            )
         for path in selected_paths:
             command = base_build_command(args)
             command.extend(["--recipe", path])
@@ -252,6 +371,16 @@ def cmd_build(args):
 
     root = recipe_dir(args.recipe_set)
     packages = available_packages(args.recipe_set)
+    unknown_local_sources = sorted(set(local_sources) - set(packages))
+    if unknown_local_sources:
+        raise SystemExit("Unknown --local-source package(s): {}".format(", ".join(unknown_local_sources)))
+    unknown_local_source_refs = sorted(set(local_source_refs) - set(packages))
+    if unknown_local_source_refs:
+        raise SystemExit("Unknown --local-source-ref package(s): {}".format(", ".join(unknown_local_source_refs)))
+    if local_sources and (args.all or args.up_to):
+        raise SystemExit("--local-source can only be used with explicit --package selections")
+    if local_source_refs and (args.all or args.up_to):
+        raise SystemExit("--local-source-ref can only be used with explicit --package selections")
 
     if args.up_to:
         targets = output_package_names(root, packages)
@@ -269,11 +398,36 @@ def cmd_build(args):
     unknown = sorted(set(selected) - set(packages))
     if unknown:
         raise SystemExit("Unknown package(s): {}".format(", ".join(unknown)))
+    unused_local_sources = sorted(set(local_sources) - set(selected))
+    if unused_local_sources:
+        raise SystemExit(
+            "--local-source provided for package(s) that are not selected: {}".format(
+                ", ".join(unused_local_sources)
+            )
+        )
+    unused_local_source_refs = sorted(set(local_source_refs) - set(selected))
+    if unused_local_source_refs:
+        raise SystemExit(
+            "--local-source-ref provided for package(s) that are not selected: {}".format(
+                ", ".join(unused_local_source_refs)
+            )
+        )
+    validate_local_source_refs(local_sources, local_source_refs)
 
-    for package in ordered_packages(args.recipe_set, selected):
-        command = base_build_command(args)
-        command.extend(["--recipe", root / package])
-        run(command, dry_run=args.dry_run, env=env)
+    temp_context = tempfile.TemporaryDirectory(prefix="rattler-local-source-") if local_sources else None
+    try:
+        temp_root = Path(temp_context.name) if temp_context else None
+        for package in ordered_packages(args.recipe_set, selected):
+            recipe_path = root / package
+            if package in local_sources:
+                recipe_path = local_source_recipe(root, package, local_sources[package], temp_root)
+                print("# local-source {}={}".format(package, local_sources[package]), flush=True)
+            command = base_build_command(args)
+            command.extend(["--recipe", recipe_path])
+            run(command, dry_run=args.dry_run, env=env)
+    finally:
+        if temp_context is not None:
+            temp_context.cleanup()
     return 0
 
 
@@ -433,6 +587,24 @@ def parse_args():
     build.add_argument("--all", action="store_true", help="Build all recipes in dependency order.")
     build.add_argument("--up-to", help="Build a bundled recipe dependency set via rattler-build --recipe-dir.")
     build.add_argument("--recipe-path", action="append", type=Path, help="Custom recipe directory or recipe.yaml path.")
+    build.add_argument(
+        "--local-source",
+        action="append",
+        default=[],
+        help=(
+            "Use a local source checkout for a bundled package with package=path syntax. "
+            "Repeat for multiple packages. Only valid with explicit --package selections."
+        ),
+    )
+    build.add_argument(
+        "--local-source-ref",
+        action="append",
+        default=[],
+        help=(
+            "Require a local source checkout to be exactly at package=ref before building. "
+            "Repeat for multiple packages. Use with --local-source."
+        ),
+    )
     build.add_argument(
         "--output-dir",
         type=Path,

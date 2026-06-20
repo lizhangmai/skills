@@ -192,6 +192,23 @@ guardrails such as missing output directories, no silent global tool installs,
 minimal Monata circuit/layout-tool builds, pixi global isolation, and techlib
 redistribution boundaries.
 
+For live checks that might touch pixi, package caches, or local channels, run
+the command through the Singularity wrapper first with `--dry-run`:
+
+```bash
+python scripts/skill_container.py \
+  --state-dir /tmp/monata-env-skill-test \
+  --workspace tests/fixtures/workspaces/monata-basic \
+  --dry-run \
+  -- \
+  bash -lc 'cd /mnt/project && python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py --root /mnt/project --output-dir /tmp/skill-channel --write-manifest --format json'
+```
+
+The wrapper binds this repository to `/mnt/skills`, the workspace to
+`/mnt/project`, and a disposable channel to `/tmp/skill-channel`, while setting
+`HOME`, `PIXI_HOME`, `XDG_CACHE_HOME`, and `RATTLER_CACHE_DIR` under
+`/tmp/skill-home`.
+
 ## Publishing Boundary
 
 This repository should contain reusable skills, helper scripts, references, and

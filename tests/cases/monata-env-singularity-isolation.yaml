@@ -3,14 +3,18 @@
   "skill": "monata-env",
   "provider": "singularity-dry-run",
   "workspace_fixture": "monata-basic",
+  "singularity_image": "docker://ubuntu:24.04",
+  "singularity_command": "test \"$HOME\" = /tmp/skill-home && test \"$PIXI_HOME\" = /tmp/skill-home/.pixi && test \"$CONDA_BUILD_OUTPUT_DIR\" = /tmp/skill-channel && test -d /mnt/skills && test -d /mnt/project",
   "prompt": "Use the monata-env skill in an isolated Singularity test context. CONDA_BUILD_OUTPUT_DIR=/tmp/monata-channel",
   "assertions": {
     "must_contain": [
       "singularity",
       "--cleanenv",
       "--containall",
+      "scripts/skill_container.py",
       "PIXI_HOME=/tmp/skill-home/.pixi",
-      "CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel"
+      "CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel",
+      "test -d /mnt/skills"
     ]
   }
 }

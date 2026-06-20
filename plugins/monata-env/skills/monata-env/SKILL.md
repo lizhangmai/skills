@@ -345,6 +345,22 @@ ordinary development and use the Singularity provider only for explicit live
 checks. Live checks must run with a temporary home and pixi cache so they do
 not mutate the user's current environment.
 
+Use the repository container wrapper for live setup checks:
+
+```bash
+python scripts/skill_container.py \
+  --state-dir /tmp/monata-env-skill-test \
+  --workspace "<project-workspace>" \
+  --dry-run \
+  -- \
+  bash -lc 'cd /mnt/project && python3 /mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py --root /mnt/project --output-dir /tmp/skill-channel --write-manifest --format json'
+```
+
+Remove `--dry-run` only when the printed command shows the expected binds and
+temporary state directories. For live install/smoke checks, keep
+`CONDA_BUILD_OUTPUT_DIR=/tmp/skill-channel`; pixi global state is isolated by
+`PIXI_HOME=/tmp/skill-home/.pixi`.
+
 The expected isolation variables are:
 
 ```bash

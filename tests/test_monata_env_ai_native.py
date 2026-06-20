@@ -1104,6 +1104,56 @@ def test_upstream_script_splits_full_xschem_profile_into_basic_and_regression_ch
     assert "full-regression-ok" in checks[1]["output"]
 
 
+def test_upstream_script_can_reuse_kept_work_dir_for_xschem_reruns(tmp_path):
+    source = tmp_path / "xschem"
+    tests_dir = source / "tests"
+    library_dir = source / "xschem_library"
+    env_prefix = tmp_path / "monata-env"
+    work_dir = tmp_path / "upstream-work"
+    tests_dir.mkdir(parents=True)
+    library_dir.mkdir()
+    (env_prefix / "bin").mkdir(parents=True)
+    (tests_dir / "run_regression.tcl").write_text("puts ok\n", encoding="utf-8")
+    (library_dir / "README").write_text("test library\n", encoding="utf-8")
+
+    xschem = env_prefix / "bin" / "xschem"
+    xschem.write_text(
+        "#!/bin/sh\n"
+        "mkdir -p \"$(dirname \"$1\")\"\n"
+        "printf 'schematic\\n' > \"$1\"\n"
+        "printf 'create-save-ok\\n'\n",
+        encoding="utf-8",
+    )
+    xschem.chmod(0o755)
+
+    base_command = [
+        sys.executable,
+        UPSTREAM_SCRIPT,
+        "--format",
+        "json",
+        "--xschem-source",
+        source,
+        "--env-prefix",
+        env_prefix,
+        "--env-name",
+        "test-monata-env",
+        "--work-dir",
+        work_dir,
+        "--keep-work-dir",
+    ]
+
+    first = run(base_command)
+    stale = work_dir / "xschem-upstream" / "stale.txt"
+    stale.write_text("stale\n", encoding="utf-8")
+    second = run(base_command)
+
+    assert first.returncode == 0, first.stdout
+    assert second.returncode == 0, second.stdout
+    assert not stale.exists()
+    data = json.loads(second.stdout)
+    assert data["profiles"]["xschem"]["checks"][0]["output_size"] > 0
+
+
 def test_upstream_script_reports_structured_timeout_for_full_xschem_profile(tmp_path):
     source = tmp_path / "xschem"
     tests_dir = source / "tests"

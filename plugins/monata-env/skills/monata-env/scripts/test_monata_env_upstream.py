@@ -158,6 +158,8 @@ def run_klayout_upstream(source, work_dir, env_name, env_prefix, timeout):
 
 def copy_xschem_test_tree(source, work_dir):
     root = work_dir / "xschem-upstream"
+    if root.exists():
+        shutil.rmtree(root)
     tests_dest = root / "tests"
     library_dest = root / "xschem_library"
     shutil.copytree(source / "tests", tests_dest)

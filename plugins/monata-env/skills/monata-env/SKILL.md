@@ -124,12 +124,12 @@ directory.
    source policy, pixi global writes, test isolation, and upstream test
    profile. Treat `plan.runbook` as the authoritative execution sequence. Each
    runbook item contains the command to run, whether user confirmation is
-   required, where JSON stdout should be captured, and a `record_after` command
-   that must run after the step so the manifest keeps return codes, package
-   artifacts, and verification payloads. Review the plan's `questions`. Ask the
-   user before doing a recommended fallback such as creating temporary detached
-   worktrees, installing missing host tools, or writing to the pixi global
-   environment.
+   required, which previous step ids it `depends_on`, where JSON stdout should
+   be captured, and a `record_after` command that must run after the step so
+   the manifest keeps return codes, package artifacts, and verification
+   payloads. Review the plan's `questions`. Ask the user before doing a
+   recommended fallback such as creating temporary detached worktrees,
+   installing missing host tools, or writing to the pixi global environment.
 
    Prefer the executor for runbook steps instead of manually retyping commands:
 
@@ -140,8 +140,9 @@ directory.
    ```
 
    By default this runs only recommended steps that do not require
-   confirmation. After the user approves mutating steps such as build or pixi
-   global install, run the selected steps explicitly:
+   confirmation and skips downstream steps whose `depends_on` prerequisites
+   were skipped or failed. After the user approves mutating steps such as build
+   or pixi global install, run the selected steps explicitly:
 
    ```bash
    python scripts/execute_monata_env_runbook.py \

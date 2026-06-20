@@ -212,10 +212,12 @@ def test_plan_runbook_records_build_install_and_smoke_steps(tmp_path):
     assert "--package xschem" in build_record
 
     install_step = runbook["install"]
+    assert install_step["depends_on"] == ["build"]
     assert install_step["record_after"]["returncode_var"] == "INSTALL_RC"
     assert "--command-kind install" in " ".join(install_step["record_after"]["command"])
 
     smoke_step = runbook["smoke"]
+    assert smoke_step["depends_on"] == ["install"]
     smoke_json = output_dir.resolve() / "monata-env-smoke.json"
     assert smoke_step["stdout_path"] == str(smoke_json)
     assert smoke_step["record_after"]["returncode_var"] == "SMOKE_RC"
@@ -256,6 +258,7 @@ def test_plan_runbook_records_optional_upstream_installed_tests(tmp_path):
     runbook = {step["id"]: step for step in data["runbook"]}
     upstream_step = runbook["upstream_installed_tests"]
     upstream_json = output_dir.resolve() / "monata-env-upstream-installed.json"
+    assert upstream_step["depends_on"] == ["smoke"]
     assert upstream_step["recommended"] is True
     assert upstream_step["requires_confirmation"] is True
     assert upstream_step["command"] == data["commands"]["upstream_installed_tests"]
@@ -507,6 +510,55 @@ def test_execute_runbook_requires_confirmation_for_mutating_steps(tmp_path):
     executed_summary = json.loads(executed.stdout)
     assert executed_summary["steps"][0]["status"] == "executed"
     assert marker.read_text(encoding="utf-8") == "ran"
+
+
+def test_execute_runbook_skips_downstream_when_dependency_is_skipped(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    install_marker = tmp_path / "install.txt"
+    smoke_marker = tmp_path / "smoke.txt"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "install",
+                        "recommended": True,
+                        "requires_confirmation": True,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            f"from pathlib import Path; Path({str(install_marker)!r}).write_text('install')",
+                        ],
+                    },
+                    {
+                        "id": "smoke",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "depends_on": ["install"],
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            f"from pathlib import Path; Path({str(smoke_marker)!r}).write_text('smoke')",
+                        ],
+                    },
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 0, result.stdout
+    summary = json.loads(result.stdout)
+    assert summary["steps"][0]["status"] == "skipped"
+    assert summary["steps"][0]["reason"] == "requires-confirmation"
+    assert summary["steps"][1]["status"] == "skipped"
+    assert summary["steps"][1]["reason"] == "dependency-skipped"
+    assert summary["steps"][1]["dependency"] == "install"
+    assert not install_marker.exists()
+    assert not smoke_marker.exists()
 
 
 def test_record_manifest_appends_command_and_verification_payload(tmp_path):

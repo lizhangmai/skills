@@ -20,6 +20,7 @@
       "--write-manifest",
       "plan.decisions",
       "plan.runbook",
+      "depends_on",
       "record_after",
       "source policy",
       "test isolation",

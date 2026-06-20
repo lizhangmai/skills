@@ -26,6 +26,7 @@
       "execute_monata_env_runbook.py",
       "plan_monata_env.py",
       "runbook",
+      "depends_on",
       "record_after",
       "record_monata_env_session.py",
       "smoke_monata_env_tools.py",

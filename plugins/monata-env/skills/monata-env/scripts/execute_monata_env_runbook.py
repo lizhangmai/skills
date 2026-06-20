@@ -52,6 +52,34 @@ def should_skip(step, args, explicit_steps):
     return ""
 
 
+def dependency_satisfied(item):
+    if item["status"] == "executed":
+        return item["returncode"] == 0 and item.get("record_returncode") in {None, 0}
+    if item["status"] == "skipped":
+        return item.get("reason") in {"no-command", "not-recommended"}
+    return item["status"] == "dry-run"
+
+
+def dependency_skip(step, results_by_id, selected_ids, explicit_steps):
+    for dependency in step.get("depends_on", []):
+        if explicit_steps and dependency not in selected_ids:
+            continue
+        item = results_by_id.get(dependency)
+        if item is None:
+            return {
+                "status": "skipped",
+                "reason": "dependency-missing",
+                "dependency": dependency,
+            }
+        if not dependency_satisfied(item):
+            return {
+                "status": "skipped",
+                "reason": "dependency-skipped",
+                "dependency": dependency,
+            }
+    return None
+
+
 def run_command(command, cwd=None):
     return subprocess.run(
         [str(part) for part in command],
@@ -96,7 +124,11 @@ def run_record_after(step, returncode, cwd=None):
     }
 
 
-def execute_step(step, args, explicit_steps):
+def execute_step(step, args, explicit_steps, results_by_id, selected_ids):
+    dependency_result = dependency_skip(step, results_by_id, selected_ids, explicit_steps)
+    if dependency_result:
+        dependency_result["id"] = step.get("id", "")
+        return dependency_result
     reason = should_skip(step, args, explicit_steps)
     item = {
         "id": step.get("id", ""),
@@ -145,11 +177,15 @@ def parse_args():
 def run(args):
     plan = load_plan(args)
     explicit_steps = set(args.step)
+    selected = selected_steps(plan, args.step)
+    selected_ids = {step.get("id") for step in selected}
+    results_by_id = {}
     steps = []
     ok = True
-    for step in selected_steps(plan, args.step):
-        item = execute_step(step, args, explicit_steps)
+    for step in selected:
+        item = execute_step(step, args, explicit_steps, results_by_id, selected_ids)
         steps.append(item)
+        results_by_id[item["id"]] = item
         if item["status"] == "executed":
             step_ok = item["returncode"] == 0 and item.get("record_returncode") in {None, 0}
             ok = ok and step_ok

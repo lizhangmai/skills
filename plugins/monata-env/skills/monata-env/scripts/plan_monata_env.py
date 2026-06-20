@@ -249,6 +249,7 @@ def runbook(commands, build_packages, output_dir, manifest_path, upstream_recomm
             "description": "Build only missing or local-source packages, then record generated package artifacts.",
             "recommended": bool(commands["build"]),
             "requires_confirmation": True,
+            "depends_on": ["check_channel"],
             "command": commands["build"],
             "record_after": record_after_command(
                 manifest_path,
@@ -266,6 +267,7 @@ def runbook(commands, build_packages, output_dir, manifest_path, upstream_recomm
             "description": "Install exposed circuit-tool commands into the pixi global monata-env environment.",
             "recommended": True,
             "requires_confirmation": True,
+            "depends_on": ["build"],
             "command": commands["install"],
             "record_after": record_after_command(
                 manifest_path,
@@ -279,6 +281,7 @@ def runbook(commands, build_packages, output_dir, manifest_path, upstream_recomm
             "description": "Run direct installed-tool smoke tests without importing Monata or bootstrapping techlibs.",
             "recommended": True,
             "requires_confirmation": False,
+            "depends_on": ["install"],
             "command": commands["smoke"],
             "stdout_path": str(smoke_json),
             "record_after": record_after_command(
@@ -295,6 +298,7 @@ def runbook(commands, build_packages, output_dir, manifest_path, upstream_recomm
             "description": "Optionally run safe upstream test subsets against installed tools when local sources are available.",
             "recommended": upstream_recommended,
             "requires_confirmation": True,
+            "depends_on": ["smoke"],
             "command": commands["upstream_installed_tests"],
             "stdout_path": str(upstream_json),
             "record_after": record_after_command(

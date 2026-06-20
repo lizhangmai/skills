@@ -263,6 +263,81 @@ def test_plan_runbook_records_optional_upstream_installed_tests(tmp_path):
     assert f"--verification upstream_installed={upstream_json}" in upstream_record
 
 
+def test_plan_decisions_offer_network_source_and_isolated_testing_defaults(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    write_monata_workspace(workspace)
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    assert decisions["source_policy"]["default"] == "network"
+    source_options = {option["id"]: option for option in decisions["source_policy"]["options"]}
+    assert source_options["network"]["recommended"] is True
+    assert source_options["local_sources"]["recommended"] is False
+    assert decisions["test_isolation"]["default"] == "singularity"
+    isolation_options = {option["id"]: option for option in decisions["test_isolation"]["options"]}
+    assert isolation_options["singularity"]["recommended"] is True
+    assert "scripts/skill_container.py" in isolation_options["singularity"]["command"]
+    assert decisions["upstream_test_profile"]["default"] == "skip"
+
+
+def test_plan_decisions_recommend_local_sources_and_basic_upstream_profile(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--local-source",
+            f"xschem={xschem_source}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    assert decisions["source_policy"]["default"] == "local_sources"
+    source_options = {option["id"]: option for option in decisions["source_policy"]["options"]}
+    assert source_options["local_sources"]["recommended"] is True
+    assert source_options["local_sources"]["sources"] == {
+        "klayout": str(klayout_source.resolve()),
+        "xschem": str(xschem_source.resolve()),
+    }
+    assert decisions["upstream_test_profile"]["default"] == "basic"
+    profile_options = {option["id"]: option for option in decisions["upstream_test_profile"]["options"]}
+    assert profile_options["basic"]["recommended"] is True
+    assert profile_options["full"]["recommended"] is False
+    assert profile_options["skip"]["recommended"] is False
+
+
 def test_smoke_script_returns_structured_missing_tool_status(tmp_path):
     empty_bin = tmp_path / "bin"
     empty_bin.mkdir()

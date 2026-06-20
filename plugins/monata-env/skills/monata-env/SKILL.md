@@ -120,12 +120,14 @@ directory.
      --format json
    ```
 
-   Treat `plan.runbook` as the authoritative execution sequence. Each runbook
-   item contains the command to run, whether user confirmation is required,
-   where JSON stdout should be captured, and a `record_after` command that must
-   run after the step so the manifest keeps return codes, package artifacts,
-   and verification payloads. Review the plan's `questions`. Ask the user
-   before doing a recommended fallback such as creating temporary detached
+   Review `plan.decisions` with the user when there is meaningful choice:
+   source policy, pixi global writes, test isolation, and upstream test
+   profile. Treat `plan.runbook` as the authoritative execution sequence. Each
+   runbook item contains the command to run, whether user confirmation is
+   required, where JSON stdout should be captured, and a `record_after` command
+   that must run after the step so the manifest keeps return codes, package
+   artifacts, and verification payloads. Review the plan's `questions`. Ask the
+   user before doing a recommended fallback such as creating temporary detached
    worktrees, installing missing host tools, or writing to the pixi global
    environment.
 

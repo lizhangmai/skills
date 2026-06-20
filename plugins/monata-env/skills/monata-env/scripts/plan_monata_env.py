@@ -311,6 +311,114 @@ def runbook(commands, build_packages, output_dir, manifest_path, upstream_recomm
     ]
 
 
+def decisions(root, output_dir, local_source_paths, profiles, build_needed):
+    source_paths = {package: str(path) for package, path in local_source_paths.items()}
+    has_local_sources = bool(source_paths)
+    upstream_recommended = profiles["upstream_installed"]["recommended"]
+    isolation_command = (
+        "python scripts/skill_container.py "
+        "--state-dir /tmp/monata-env-skill-test "
+        f"--workspace {shlex.quote(str(Path(root).resolve()))} "
+        f"--channel {shlex.quote(str(output_dir))} "
+        "--dry-run -- "
+        "bash -lc 'cd /mnt/project && python3 "
+        "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py "
+        "--root /mnt/project --output-dir /tmp/skill-channel --write-manifest --format json'"
+    )
+    return [
+        {
+            "id": "global_environment",
+            "prompt": "Create or update the pixi global monata-env environment and exposed command shims?",
+            "default": "approve",
+            "options": [
+                {
+                    "id": "approve",
+                    "label": "Update monata-env",
+                    "recommended": True,
+                    "effect": "Runs pixi global install only for the monata-env environment.",
+                },
+                {
+                    "id": "plan_only",
+                    "label": "Plan only",
+                    "recommended": False,
+                    "effect": "Writes the manifest seed and stops before mutating pixi global state.",
+                },
+            ],
+        },
+        {
+            "id": "source_policy",
+            "prompt": "How should missing circuit-tool packages be sourced?",
+            "default": "local_sources" if has_local_sources else "network",
+            "options": [
+                {
+                    "id": "local_sources",
+                    "label": "Use provided local sources",
+                    "recommended": has_local_sources,
+                    "sources": source_paths,
+                    "effect": "Builds from trusted local checkouts and still validates required upstream refs.",
+                },
+                {
+                    "id": "network",
+                    "label": "Fetch pinned upstream sources",
+                    "recommended": not has_local_sources,
+                    "effect": "Uses the bundled recipes' pinned public upstream URLs.",
+                },
+                {
+                    "id": "existing_channel_only",
+                    "label": "Use existing channel only",
+                    "recommended": not build_needed,
+                    "effect": "Skips package builds and installs only artifacts already present in the local channel.",
+                },
+            ],
+        },
+        {
+            "id": "test_isolation",
+            "prompt": "Where should live skill validation run?",
+            "default": "singularity",
+            "options": [
+                {
+                    "id": "singularity",
+                    "label": "Isolated Singularity state",
+                    "recommended": True,
+                    "command": isolation_command,
+                    "effect": "Uses temporary HOME, PIXI_HOME, caches, and channel directories.",
+                },
+                {
+                    "id": "host",
+                    "label": "Current host environment",
+                    "recommended": False,
+                    "effect": "Fastest path but can touch the user's current pixi and cache state.",
+                },
+            ],
+        },
+        {
+            "id": "upstream_test_profile",
+            "prompt": "How much upstream project test coverage should run after installing tools?",
+            "default": "basic" if upstream_recommended else "skip",
+            "options": [
+                {
+                    "id": "skip",
+                    "label": "Skip upstream tests",
+                    "recommended": not upstream_recommended,
+                    "effect": "Runs only the installed-tool smoke test.",
+                },
+                {
+                    "id": "basic",
+                    "label": "Basic upstream-installed tests",
+                    "recommended": upstream_recommended,
+                    "effect": "Runs safe upstream subsets against installed KLayout and Xschem when source checkouts exist.",
+                },
+                {
+                    "id": "full",
+                    "label": "Full upstream regressions",
+                    "recommended": False,
+                    "effect": "Runs broader upstream suites only after explicit user approval.",
+                },
+            ],
+        },
+    ]
+
+
 def test_profiles(local_sources):
     upstream_recommended = any(package in local_sources for package in ("klayout", "xschem"))
     return {
@@ -395,6 +503,7 @@ def create_plan(root, output_dir, local_source_values, env_name):
         "local_sources": local_sources,
         "tools": tools,
         "questions": questions(local_sources),
+        "decisions": decisions(root, output_dir, local_source_paths, profiles, bool(build_packages)),
         "commands": commands,
         "runbook": runbook(
             commands,

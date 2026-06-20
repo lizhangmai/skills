@@ -20,6 +20,8 @@
       "--local-source-ref klayout=v0.30.9",
       "--local-source xschem=",
       "--local-source-ref xschem=3.4.7",
+      "plan.decisions",
+      "upstream test",
       "../circuit/klayout",
       "../circuit/xschem"
     ]

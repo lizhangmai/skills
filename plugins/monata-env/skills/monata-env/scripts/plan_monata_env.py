@@ -31,6 +31,7 @@ EXPOSED_COMMANDS = {
 }
 CACHED_SKILLS_ROOT = Path.home() / ".cache" / "monata-env" / "skills"
 DEFAULT_CONTAINER_IMAGE = "docker://python:3.12-slim"
+DEFAULT_CONTAINER_STATE_DIR = Path("/tmp/monata-env-skill-test")
 
 
 def command_string(command):
@@ -417,7 +418,7 @@ def runbook(commands, packages, build_packages, log_dir, artifact_dir, manifest_
     ]
 
 
-def container_runner_prefix(root, output_dir, container_image, helper_script, extra_options=None):
+def container_runner_prefix(root, output_dir, container_image, helper_script, state_dir, extra_options=None):
     skills_repo_root = find_skills_repo_root(helper_script)
     repo_root_option = ""
     if skills_repo_root:
@@ -425,7 +426,7 @@ def container_runner_prefix(root, output_dir, container_image, helper_script, ex
     options = "".join(extra_options or [])
     return (
         "python scripts/skill_container.py "
-        "--state-dir /tmp/monata-env-skill-test "
+        f"--state-dir {shlex.quote(str(state_dir))} "
         f"{repo_root_option}"
         f"--workspace {shlex.quote(str(Path(root).resolve()))} "
         f"--channel {shlex.quote(str(output_dir))} "
@@ -434,7 +435,7 @@ def container_runner_prefix(root, output_dir, container_image, helper_script, ex
     )
 
 
-def container_planner_command(root, output_dir, container_image, helper_script):
+def container_planner_command(root, output_dir, container_image, helper_script, state_dir):
     skills_repo_root = find_skills_repo_root(helper_script)
     container_plan_script = "/mnt/skills/scripts/plan_monata_env.py"
     container_helper_arg = ""
@@ -445,7 +446,7 @@ def container_planner_command(root, output_dir, container_image, helper_script):
             "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py"
         )
     return (
-        container_runner_prefix(root, output_dir, container_image, helper_script)
+        container_runner_prefix(root, output_dir, container_image, helper_script, state_dir)
         + "--require-command python3 "
         "--dry-run -- "
         f"bash -lc 'cd /mnt/project && python3 {container_plan_script} "
@@ -455,7 +456,7 @@ def container_planner_command(root, output_dir, container_image, helper_script):
     )
 
 
-def container_install_smoke_command(root, output_dir, container_image, helper_script, host_pixi_root):
+def container_install_smoke_command(root, output_dir, container_image, helper_script, host_pixi_root, state_dir):
     if not host_pixi_root:
         return ""
     plan_script = "/mnt/skills/scripts/plan_monata_env.py"
@@ -479,6 +480,7 @@ def container_install_smoke_command(root, output_dir, container_image, helper_sc
             output_dir,
             container_image,
             helper_script,
+            state_dir,
             extra_options=[
                 f"--bind {shlex.quote(bind)} ",
                 "--prepend-path /opt/host-pixi/bin ",
@@ -508,6 +510,7 @@ def decisions(
     build_needed,
     container_image,
     helper_script,
+    container_state_dir,
     host_pixi_root=None,
 ):
     source_paths = {package: str(path) for package, path in local_source_paths.items()}
@@ -519,7 +522,7 @@ def decisions(
         source_default = "local_sources"
     else:
         source_default = "network"
-    isolation_command = container_planner_command(root, output_dir, container_image, helper_script)
+    isolation_command = container_planner_command(root, output_dir, container_image, helper_script, container_state_dir)
     isolated_commands = {"planner": isolation_command}
     live_install_command = container_install_smoke_command(
         root,
@@ -527,6 +530,7 @@ def decisions(
         container_image,
         helper_script,
         host_pixi_root,
+        container_state_dir,
     )
     if live_install_command:
         isolated_commands["install_smoke"] = live_install_command
@@ -675,6 +679,7 @@ def create_plan(
     conda_build_helper=None,
     container_image=None,
     session_dir=None,
+    container_state_dir=None,
     host_pixi_root=None,
 ):
     detected = detect(root)
@@ -682,6 +687,12 @@ def create_plan(
     helper_script = resolve_conda_build_helper(conda_build_helper)
     resolved_container_image = resolve_container_image(container_image)
     resolved_session_dir = Path(session_dir).expanduser().resolve() if session_dir else output_dir
+    if container_state_dir:
+        resolved_container_state_dir = Path(container_state_dir).expanduser().resolve()
+    elif session_dir:
+        resolved_container_state_dir = resolved_session_dir / "container-state"
+    else:
+        resolved_container_state_dir = DEFAULT_CONTAINER_STATE_DIR
     resolved_host_pixi_root = Path(host_pixi_root).expanduser().resolve() if host_pixi_root else None
     local_source_paths = parse_key_path(local_source_values)
     local_sources = {
@@ -729,6 +740,7 @@ def create_plan(
         },
         "container": {
             "image": resolved_container_image,
+            "state_dir": str(resolved_container_state_dir),
             "host_pixi_root": str(resolved_host_pixi_root) if resolved_host_pixi_root else "",
             "live_install_smoke_command": container_install_smoke_command(
                 root,
@@ -736,6 +748,7 @@ def create_plan(
                 resolved_container_image,
                 helper_script,
                 resolved_host_pixi_root,
+                resolved_container_state_dir,
             ),
         },
         "local_sources": local_sources,
@@ -753,6 +766,7 @@ def create_plan(
             bool(build_packages),
             resolved_container_image,
             helper_script,
+            resolved_container_state_dir,
             resolved_host_pixi_root,
         ),
         "commands": commands,
@@ -788,6 +802,11 @@ def parse_args():
         "--host-pixi-root",
         type=Path,
         help="Host pixi installation root to bind read-only for isolated live install/smoke checks.",
+    )
+    parser.add_argument(
+        "--container-state-dir",
+        type=Path,
+        help="Host directory for isolated Singularity HOME, pixi, rattler, and image cache state.",
     )
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
@@ -831,6 +850,7 @@ def main():
         args.conda_build_helper,
         args.container_image,
         args.session_dir,
+        args.container_state_dir,
         args.host_pixi_root,
     )
     if args.write_manifest:

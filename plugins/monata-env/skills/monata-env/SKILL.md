@@ -146,6 +146,21 @@ directory.
      --format json
    ```
 
+   When `--session-dir` is supplied, the planner's generated Singularity
+   commands keep container HOME, pixi, rattler, and image cache state under
+   `<session-dir>/container-state`. Override that location only when you need a
+   different disposable state root:
+
+   ```bash
+   python scripts/plan_monata_env.py \
+     --root "<project-workspace>" \
+     --output-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --session-dir /tmp/monata-env-session \
+     --container-state-dir /tmp/monata-env-container-state \
+     --write-manifest \
+     --format json
+   ```
+
    For an isolated live install/smoke check that reuses a trusted host pixi
    binary without mutating the host pixi global state, pass the pixi install
    root explicitly. The planner will include a ready-to-run

@@ -20,6 +20,7 @@
       "scripts/execute_monata_env_runbook.py",
       "--write-manifest",
       "--host-pixi-root",
+      "--container-state-dir",
       "--repo-root",
       "--conda-build-helper",
       "--session-dir",

@@ -515,6 +515,7 @@ def test_plan_decisions_can_emit_isolated_live_install_smoke_command(tmp_path):
     assert commands["planner"] == singularity["command"]
     live_install = commands["install_smoke"]
     assert "scripts/skill_container.py" in live_install
+    assert f"--state-dir {session_dir.resolve() / 'container-state'}" in live_install
     assert f"--image {image.resolve()}" in live_install
     assert f"--channel {output_dir.resolve()}" in live_install
     assert f"--bind {host_pixi_root.resolve()}:/opt/host-pixi:ro" in live_install

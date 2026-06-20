@@ -463,8 +463,9 @@ directory.
    can still show whether basic installed-tool behavior passed. Full Xschem
    regression needs `tclsh`; the upstream test helper first looks inside the
    pixi global env prefix, then falls back to `PATH`. The executor will suggest
-   installing/exposing Tcl, inspecting full-regression timeout output, or
-   re-planning with `--upstream-profile basic` when those cases occur.
+   installing/exposing Tcl, inspecting full-regression timeout output, rerunning
+   the upstream helper with a larger `--timeout`, or re-planning with
+   `--upstream-profile basic` when those cases occur.
    Planner-generated upstream commands use
    `--work-dir <session-dir>/monata-env-upstream-work --keep-work-dir` so the
    copied upstream test tree remains available after failures.

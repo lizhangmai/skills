@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -165,11 +166,34 @@ def run_record_after(step, returncode, cwd=None):
 
 
 def output_text(item):
-    return "\n".join(
+    chunks = [
         str(item.get(key, ""))
         for key in ("stdout", "stderr", "record_stdout", "record_stderr")
         if item.get(key)
-    ).lower()
+    ]
+    for key in ("stdout_path", "stderr_path"):
+        path_text = item.get(key)
+        if not path_text:
+            continue
+        path = Path(path_text)
+        if path.exists():
+            chunks.append(path.read_text(encoding="utf-8", errors="replace")[-6000:])
+    return "\n".join(chunks).lower()
+
+
+def upstream_rerun_command(step, timeout):
+    command = [str(part) for part in step.get("original_command") or step.get("command") or []]
+    if not command:
+        return ""
+    if "--timeout" in command:
+        timeout_index = command.index("--timeout")
+        if timeout_index + 1 < len(command):
+            command[timeout_index + 1] = str(timeout)
+        else:
+            command.append(str(timeout))
+    else:
+        command.extend(["--timeout", str(timeout)])
+    return shlex.join(command)
 
 
 def next_actions_for_failure(step, item):
@@ -182,12 +206,14 @@ def next_actions_for_failure(step, item):
     step_id = step.get("id", "")
     actions = []
     if step_id == "upstream_installed_tests" and "xschem-full-regression" in text and "timed out after" in text:
+        rerun_command = upstream_rerun_command(step, 900)
         actions.extend(
             [
                 {
                     "id": "inspect-xschem-full-regression-timeout",
                     "title": "Inspect Xschem full regression timeout",
                     "requires_user_input": False,
+                    "command": rerun_command,
                     "prompt": "The Xschem basic create-save check passed, but xschem-full-regression timed out. Inspect that check output, then rerun full upstream tests with a larger timeout or use the basic profile for routine validation.",
                 },
                 {

@@ -1572,6 +1572,7 @@ def test_execute_runbook_suggests_upstream_test_dependency_for_tclsh_missing(tmp
 
 def test_execute_runbook_suggests_full_regression_recovery_after_xschem_timeout(tmp_path):
     plan_path = tmp_path / "plan.json"
+    upstream_output = tmp_path / "fake-upstream-output.py"
     upstream_payload = {
         "ok": False,
         "profiles": {
@@ -1589,6 +1590,29 @@ def test_execute_runbook_suggests_full_regression_recovery_after_xschem_timeout(
             }
         },
     }
+    upstream_output.write_text(
+        "import json, sys\n"
+        f"print(json.dumps({upstream_payload!r}))\n"
+        "sys.exit(1)\n",
+        encoding="utf-8",
+    )
+    original_command = [
+        sys.executable,
+        str(UPSTREAM_SCRIPT),
+        "--format",
+        "json",
+        "--profile",
+        "full",
+        "--timeout",
+        "300",
+        "--work-dir",
+        "/tmp/monata-env-upstream-work",
+        "--keep-work-dir",
+        "--klayout-source",
+        "/src/klayout",
+        "--xschem-source",
+        "/src/xschem",
+    ]
     plan_path.write_text(
         json.dumps(
             {
@@ -1597,15 +1621,9 @@ def test_execute_runbook_suggests_full_regression_recovery_after_xschem_timeout(
                         "id": "upstream_installed_tests",
                         "recommended": True,
                         "requires_confirmation": False,
-                        "command": [
-                            sys.executable,
-                            "-c",
-                            (
-                                "import json, sys; "
-                                f"print(json.dumps({upstream_payload!r})); "
-                                "sys.exit(1)"
-                            ),
-                        ],
+                        "command": [sys.executable, str(upstream_output)],
+                        "original_command": original_command,
+                        "stdout_path": str(tmp_path / "upstream.json"),
                     }
                 ]
             }
@@ -1622,6 +1640,12 @@ def test_execute_runbook_suggests_full_regression_recovery_after_xschem_timeout(
     assert action_ids[:2] == ["inspect-xschem-full-regression-timeout", "use-basic-upstream-profile"]
     assert summary["steps"][0]["next_actions"][0]["requires_user_input"] is False
     assert "xschem-full-regression" in summary["steps"][0]["next_actions"][0]["prompt"]
+    rerun_command = summary["steps"][0]["next_actions"][0]["command"]
+    assert "test_monata_env_upstream.py" in rerun_command
+    assert "--profile full" in rerun_command
+    assert "--timeout 900" in rerun_command
+    assert "--work-dir /tmp/monata-env-upstream-work" in rerun_command
+    assert "--keep-work-dir" in rerun_command
     assert "--upstream-profile basic" in summary["steps"][0]["next_actions"][1]["command"]
 
 

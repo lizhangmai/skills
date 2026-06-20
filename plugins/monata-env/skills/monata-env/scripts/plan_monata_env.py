@@ -33,6 +33,16 @@ CACHED_SKILLS_ROOT = Path.home() / ".cache" / "monata-env" / "skills"
 DEFAULT_CONTAINER_IMAGE = "docker://python:3.12-slim"
 DEFAULT_CONTAINER_STATE_DIR = Path("/tmp/monata-env-skill-test")
 TEST_IMAGE_REQUIRED_COMMANDS = ["/usr/local/bin/python3", "git", "pixi"]
+SOURCE_ARCHIVE_SUFFIXES = (
+    ".tar",
+    ".tar.gz",
+    ".tgz",
+    ".tar.bz2",
+    ".tbz2",
+    ".tar.xz",
+    ".txz",
+    ".zip",
+)
 
 
 def command_string(command):
@@ -128,17 +138,36 @@ def parse_key_path(values):
     return parsed
 
 
+def is_source_archive(path):
+    if not path.is_file():
+        return False
+    name = path.name.lower()
+    return any(name.endswith(suffix) for suffix in SOURCE_ARCHIVE_SUFFIXES)
+
+
 def local_source_status(package, path):
     target_ref = EXPECTED_SOURCE_REFS.get(package)
     item = {
         "path": str(path),
         "exists": path.exists(),
         "target_ref": target_ref,
+        "source_kind": "missing",
         "status": "unchecked",
     }
     if not path.exists():
         item["status"] = "missing"
         return item
+    if path.is_file():
+        item["source_kind"] = "archive" if is_source_archive(path) else "file"
+        item["filename"] = path.name
+        item["size"] = path.stat().st_size
+        if is_source_archive(path):
+            item["status"] = "archive"
+            item["validation"] = "trusted-local-archive"
+        else:
+            item["status"] = "unsupported-file"
+        return item
+    item["source_kind"] = "directory"
     if shutil.which("git") is None:
         item["status"] = "git-unavailable"
         return item
@@ -212,7 +241,7 @@ def build_command(packages, output_dir, local_sources, helper_script):
         command.extend(["--package", package])
     for package, path in local_sources.items():
         command.extend(["--local-source", f"{package}={path}"])
-        if package in EXPECTED_SOURCE_REFS:
+        if package in EXPECTED_SOURCE_REFS and not is_source_archive(path):
             command.extend(["--local-source-ref", f"{package}={EXPECTED_SOURCE_REFS[package]}"])
     command.append("--skip-existing")
     if output_dir:
@@ -642,6 +671,7 @@ def decisions(
     root,
     output_dir,
     local_source_paths,
+    upstream_source_paths,
     profiles,
     build_needed,
     container_image,
@@ -689,8 +719,8 @@ def decisions(
         host_pixi_root,
         container_state_dir,
         env_name=env_name,
-        local_source_paths=local_source_paths,
-        include_upstream=bool(local_source_paths),
+        local_source_paths=upstream_source_paths,
+        include_upstream=bool(upstream_source_paths),
         upstream_profile=upstream_profile,
     )
     if live_upstream_command:
@@ -844,6 +874,29 @@ def test_profiles(local_sources):
 
 def questions(local_sources):
     items = []
+    archive_sources = {
+        package: item
+        for package, item in local_sources.items()
+        if item["status"] == "archive"
+    }
+    if archive_sources:
+        items.append(
+            {
+                "id": "local_source_archive_trust",
+                "question": "Local source archive cannot be git-ref validated. Treat it as a trusted user-provided source archive for package build only?",
+                "recommended": True,
+                "archive_sources": {
+                    package: {
+                        "path": item.get("path", ""),
+                        "filename": item.get("filename", ""),
+                        "size": item.get("size", 0),
+                        "target_ref": item.get("target_ref"),
+                    }
+                    for package, item in archive_sources.items()
+                },
+                "effect": "Builds from the local archive after temporary extraction; upstream-installed tests still need source directories.",
+            }
+        )
     ref_mismatches = {
         package: item
         for package, item in local_sources.items()
@@ -873,7 +926,7 @@ def questions(local_sources):
             }
         )
     if any(
-        item["status"] in {"missing", "not-git", "target-ref-missing", "git-unavailable"}
+        item["status"] in {"missing", "not-git", "target-ref-missing", "git-unavailable", "unsupported-file"}
         for item in local_sources.values()
     ):
         problem_sources = {
@@ -883,7 +936,7 @@ def questions(local_sources):
                 "target_ref": item.get("target_ref"),
             }
             for package, item in local_sources.items()
-            if item["status"] in {"missing", "not-git", "target-ref-missing", "git-unavailable"}
+            if item["status"] in {"missing", "not-git", "target-ref-missing", "git-unavailable", "unsupported-file"}
         }
         items.append(
             {
@@ -939,6 +992,11 @@ def create_plan(
         for package, path in local_source_paths.items()
         if package in build_packages
     }
+    upstream_source_paths = {
+        package: path
+        for package, path in local_source_paths.items()
+        if path.is_dir()
+    }
     tools = {
         package: {
             "command": EXPOSED_COMMANDS.get(package, package),
@@ -958,14 +1016,14 @@ def create_plan(
         "install": install_command(packages, output_dir, env_name),
         "smoke": [sys.executable, str(SCRIPT_DIR / "smoke_monata_env_tools.py"), "--format", "json"],
         "upstream_installed_tests": upstream_installed_test_command(
-            local_source_paths,
+            upstream_source_paths,
             upstream_profile,
             env_name,
             upstream_work_dir,
         ),
         "audit": audit_command(manifest_path),
     }
-    profiles = test_profiles(local_source_paths)
+    profiles = test_profiles(upstream_source_paths)
     test_image = test_image_plan(
         root,
         output_dir,
@@ -1008,8 +1066,8 @@ def create_plan(
                 resolved_host_pixi_root,
                 resolved_container_state_dir,
                 env_name=env_name,
-                local_source_paths=local_source_paths,
-                include_upstream=bool(local_source_paths),
+                local_source_paths=upstream_source_paths,
+                include_upstream=bool(upstream_source_paths),
                 upstream_profile=upstream_profile,
             ),
         },
@@ -1024,6 +1082,7 @@ def create_plan(
             root,
             output_dir,
             local_source_paths,
+            upstream_source_paths,
             profiles,
             bool(build_packages),
             resolved_container_image,

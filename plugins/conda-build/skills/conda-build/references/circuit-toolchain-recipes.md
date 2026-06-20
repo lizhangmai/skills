@@ -39,8 +39,9 @@ export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
 
 The wrapper writes artifacts to explicit `--output-dir`, `$CONDA_BUILD_OUTPUT_DIR`, or `$CONDA_BLD_PATH`. It does not choose a default final channel. It can check whether selected artifacts already exist in that channel before building. It solves dependencies from `https://prefix.dev/conda-forge`.
 
-For network-constrained users who already have trusted local upstream checkouts,
-the wrapper can build bundled recipes with temporary local-source overlays:
+For network-constrained users who already have trusted local upstream checkouts
+or source archives, the wrapper can build bundled recipes with temporary
+local-source overlays:
 
 ```bash
 python scripts/rattler_channel.py build \
@@ -61,6 +62,11 @@ and must already be checked out to the recipe's intended upstream version. Use
 `HEAD` does not match the expected tag or revision. Artifacts must still be
 produced by `rattler-build build --output-dir`; do not hand-copy packages into
 a channel.
+
+`--local-source` also accepts trusted `.tar`, `.tar.gz`, `.tar.xz`, and `.zip`
+source archives. The helper extracts the archive to a temporary directory and
+uses that extracted directory as `source.path`. Do not combine source archives
+with `--local-source-ref`; git ref validation only applies to checkouts.
 
 The installed-artifact smoke-test wrapper is:
 

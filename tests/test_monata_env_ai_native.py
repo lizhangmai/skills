@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 
@@ -181,6 +182,14 @@ def write_channel_artifacts(output_dir: Path, packages: list[str]) -> None:
         (linux64 / f"{package}-{versions[package]}-hb0f4dca_0.conda").write_text("", encoding="utf-8")
 
 
+def write_source_archive(path: Path, top_dir: str = "source") -> None:
+    source_root = path.parent / top_dir
+    source_root.mkdir(parents=True)
+    (source_root / "README.md").write_text("local source archive\n", encoding="utf-8")
+    with tarfile.open(path, "w:gz") as archive:
+        archive.add(source_root, arcname=top_dir)
+
+
 def test_plan_reports_ref_mismatch_and_recommended_commands(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"
@@ -257,6 +266,42 @@ def test_plan_reports_git_unavailable_for_local_source_validation(tmp_path):
     assert data["questions"][0]["problem_sources"]["klayout"]["status"] == "git-unavailable"
     assert data["questions"][0]["problem_sources"]["klayout"]["path"] == str(klayout_source.resolve())
     assert data["questions"][0]["problem_sources"]["klayout"]["target_ref"] == "v0.30.9"
+
+
+def test_plan_accepts_local_source_archive_without_git_ref_validation(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    klayout_archive = tmp_path / "klayout-v0.30.9.tar.gz"
+    write_monata_workspace(workspace)
+    write_source_archive(klayout_archive, "klayout-0.30.9")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--local-source",
+            f"klayout={klayout_archive}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["local_sources"]["klayout"]["status"] == "archive"
+    assert data["local_sources"]["klayout"]["source_kind"] == "archive"
+    assert data["local_sources"]["klayout"]["target_ref"] == "v0.30.9"
+    assert data["questions"][0]["id"] == "local_source_archive_trust"
+    assert data["questions"][0]["archive_sources"]["klayout"]["path"] == str(klayout_archive.resolve())
+    build_command = " ".join(data["commands"]["build"])
+    assert f"--local-source klayout={klayout_archive.resolve()}" in build_command
+    assert "--local-source-ref klayout=v0.30.9" not in build_command
+    assert data["commands"]["upstream_installed_tests"] == []
+    assert data["test_profiles"]["upstream_installed"]["recommended"] is False
 
 
 def test_plan_skips_build_when_existing_channel_has_local_source_packages(tmp_path):
@@ -2016,3 +2061,59 @@ def test_rattler_local_source_ref_rejects_mismatched_checkout(tmp_path):
 
     assert result.returncode != 0
     assert "does not match required ref" in result.stdout
+
+
+def test_rattler_local_source_archive_dry_run_uses_extracted_source_path(tmp_path):
+    archive = tmp_path / "klayout-v0.30.9.tar.gz"
+    channel = tmp_path / "channel"
+    write_source_archive(archive, "klayout-0.30.9")
+
+    result = run(
+        [
+            sys.executable,
+            RATTLER_SCRIPT,
+            "build",
+            "--recipe-set",
+            "circuit-toolchain",
+            "--package",
+            "klayout",
+            "--local-source",
+            f"klayout={archive}",
+            "--output-dir",
+            channel,
+            "--dry-run",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert "# local-source-archive klayout=" in result.stdout
+    assert "klayout-v0.30.9.tar.gz" in result.stdout
+    assert "+ rattler-build build" in result.stdout
+
+
+def test_rattler_local_source_archive_rejects_git_ref_validation(tmp_path):
+    archive = tmp_path / "klayout-v0.30.9.tar.gz"
+    channel = tmp_path / "channel"
+    write_source_archive(archive, "klayout-0.30.9")
+
+    result = run(
+        [
+            sys.executable,
+            RATTLER_SCRIPT,
+            "build",
+            "--recipe-set",
+            "circuit-toolchain",
+            "--package",
+            "klayout",
+            "--local-source",
+            f"klayout={archive}",
+            "--local-source-ref",
+            "klayout=v0.30.9",
+            "--output-dir",
+            channel,
+            "--dry-run",
+        ]
+    )
+
+    assert result.returncode != 0
+    assert "cannot validate git ref v0.30.9 for local source archive" in result.stdout

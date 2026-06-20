@@ -24,6 +24,11 @@ description: Manage local self-use conda channels and conda package supply-chain
   `openvaf-r`, `klayout`, and `xschem`; do not use `--all` or `--up-to xyce`
   unless explicitly asked.
 - Keep third-party sources outside the skill. Recipes should fetch public upstream `git` or `url` sources with pinned revisions or checksums.
+- For explicit network-fallback builds, `--local-source package=path` may point
+  at a trusted checkout or source archive. Pair git checkouts with
+  `--local-source-ref package=ref`; do not pair archives with
+  `--local-source-ref` because archives are extracted and cannot be git-ref
+  validated.
 - Do not publish, upload, or authenticate against remote channels unless the user explicitly asks for that target and provides the needed credentials or trusted environment.
 - Read `references/legal-boundaries.md` before advising on redistribution, bundling, or license compatibility.
 - Read `references/rattler-build-workflows.md` for nontrivial rattler-build commands beyond local build/render/test.

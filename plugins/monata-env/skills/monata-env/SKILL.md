@@ -59,14 +59,18 @@ directory.
   `https://codeberg.org/stef_xschem/xschem/src/tag/3.4.7` through the bundled
   `xschem` recipe. Keep the recipe source remote, pinned to the `3.4.7`
   commit, and checksum-verified by default.
-- If the user explicitly provides a local source checkout for KLayout or
-  Xschem, pass it to the conda-build helper with `--local-source`. The helper
-  must create a temporary `source.path` overlay recipe and still use
-  `rattler-build build --output-dir`; do not hand-copy `.conda` files into the
-  channel and do not require `conda index`. Treat local source as trusted user
-  input and confirm it is checked out to the requested upstream version
-  (`v0.30.9` for KLayout, `3.4.7` for Xschem) before building. Pass
-  `--local-source-ref package=ref` so the helper enforces this check.
+- If the user explicitly provides a local source checkout or source archive
+  for KLayout or Xschem, pass it to the conda-build helper with
+  `--local-source`. The helper must create a temporary `source.path` overlay
+  recipe and still use `rattler-build build --output-dir`; do not hand-copy
+  `.conda` files into the channel and do not require `conda index`. Treat
+  local source as trusted user input. For git checkouts, confirm the source is
+  checked out to the requested upstream version (`v0.30.9` for KLayout,
+  `3.4.7` for Xschem) before building and pass
+  `--local-source-ref package=ref` so the helper enforces this check. For
+  `.tar`, `.tar.gz`, `.tar.xz`, or `.zip` source archives, the helper extracts
+  the archive to a temporary directory and builds from that directory; do not
+  pass `--local-source-ref` because an archive cannot be git-ref validated.
 - If the user-provided channel already contains the detected packages, skip the
   build and do not require `rattler-build`.
 - If a container or minimal host image does not include `git`, local source ref
@@ -382,6 +386,24 @@ directory.
    Omit `--local-source klayout=...` and `--local-source xschem=...` when the
    user did not provide local source checkouts; the bundled recipes then fetch
    pinned public sources from the network.
+
+   If the user provides a local source archive instead of a git checkout, pass
+   the archive path with `--local-source` but omit `--local-source-ref`. The
+   helper extracts trusted `.tar`, `.tar.gz`, `.tar.xz`, or `.zip` archives to
+   a temporary directory and builds from the extracted source path:
+
+   ```bash
+   python scripts/rattler_channel.py build \
+     --recipe-set circuit-toolchain \
+     --package klayout \
+     --local-source klayout="$(realpath ../circuit/klayout-v0.30.9.tar.gz)" \
+     --skip-existing
+   ```
+
+   The planner reports these as `local_source_archive_trust` questions because
+   archives cannot be git-ref validated. Use archives for package builds; use
+   source directories when running upstream-installed tests that need upstream
+   test assets.
 
    If a provided checkout is not currently at the recipe version, do not change
    the user's checkout in place. Create a temporary detached worktree at the

@@ -7,7 +7,9 @@ import os
 import shutil
 import shlex
 import subprocess
+import tarfile
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -17,6 +19,16 @@ DEFAULT_RECIPE_SET = "circuit-toolchain"
 OUTPUT_DIR_ENV_VAR = "CONDA_BUILD_OUTPUT_DIR"
 RATTLER_OUTPUT_DIR_ENV_VAR = "CONDA_BLD_PATH"
 DEFAULT_CHANNELS = ["https://prefix.dev/conda-forge"]
+SOURCE_ARCHIVE_SUFFIXES = (
+    ".tar",
+    ".tar.gz",
+    ".tgz",
+    ".tar.bz2",
+    ".tbz2",
+    ".tar.xz",
+    ".txz",
+    ".zip",
+)
 
 BUILD_ORDERS = {
     "circuit-toolchain": [
@@ -153,6 +165,13 @@ def git_commit(path, ref):
     return result.stdout.strip()
 
 
+def is_local_source_archive(path):
+    if not path.is_file():
+        return False
+    name = path.name.lower()
+    return any(name.endswith(suffix) for suffix in SOURCE_ARCHIVE_SUFFIXES)
+
+
 def validate_local_source_refs(local_sources, local_source_refs):
     missing_sources = sorted(set(local_source_refs) - set(local_sources))
     if missing_sources:
@@ -163,6 +182,12 @@ def validate_local_source_refs(local_sources, local_source_refs):
         )
     for package, ref in sorted(local_source_refs.items()):
         source_path = local_sources[package]
+        if is_local_source_archive(source_path):
+            raise SystemExit(
+                "cannot validate git ref {} for local source archive {}: {}".format(
+                    ref, package, source_path
+                )
+            )
         head = git_commit(source_path, "HEAD")
         if head is None:
             raise SystemExit(
@@ -218,8 +243,59 @@ def local_source_recipe(root, package, source_path, temp_root):
     overlay = temp_root / package
     shutil.copytree(original, overlay)
     recipe = overlay / "recipe.yaml"
-    recipe.write_text(replace_source_block(recipe.read_text(encoding="utf-8"), source_path), encoding="utf-8")
-    return overlay
+    materialized_source = materialize_local_source(package, source_path, temp_root)
+    recipe.write_text(replace_source_block(recipe.read_text(encoding="utf-8"), materialized_source), encoding="utf-8")
+    return overlay, materialized_source
+
+
+def safe_member_path(destination, member_name):
+    target = (destination / member_name).resolve()
+    root = destination.resolve()
+    if target != root and root not in target.parents:
+        raise SystemExit("Local source archive contains an unsafe path: {}".format(member_name))
+
+
+def safe_extract_tar(archive, destination):
+    for member in archive.getmembers():
+        safe_member_path(destination, member.name)
+    try:
+        archive.extractall(destination, filter="data")
+    except TypeError:
+        archive.extractall(destination)
+
+
+def safe_extract_zip(archive, destination):
+    for member in archive.infolist():
+        safe_member_path(destination, member.filename)
+    archive.extractall(destination)
+
+
+def extracted_source_root(destination):
+    entries = [path for path in destination.iterdir() if path.name != "__MACOSX"]
+    if len(entries) == 1 and entries[0].is_dir():
+        return entries[0]
+    return destination
+
+
+def extract_local_source_archive(package, source_path, temp_root):
+    destination = temp_root / "{}-archive-source".format(package)
+    destination.mkdir(parents=True, exist_ok=True)
+    try:
+        if source_path.name.lower().endswith(".zip"):
+            with zipfile.ZipFile(source_path) as archive:
+                safe_extract_zip(archive, destination)
+        else:
+            with tarfile.open(source_path) as archive:
+                safe_extract_tar(archive, destination)
+    except (tarfile.TarError, zipfile.BadZipFile, OSError) as exc:
+        raise SystemExit("Failed to extract local source archive for {}: {}: {}".format(package, source_path, exc))
+    return extracted_source_root(destination)
+
+
+def materialize_local_source(package, source_path, temp_root):
+    if is_local_source_archive(source_path):
+        return extract_local_source_archive(package, source_path, temp_root)
+    return source_path
 
 
 def rattler_command(args):
@@ -420,8 +496,17 @@ def cmd_build(args):
         for package in ordered_packages(args.recipe_set, selected):
             recipe_path = root / package
             if package in local_sources:
-                recipe_path = local_source_recipe(root, package, local_sources[package], temp_root)
-                print("# local-source {}={}".format(package, local_sources[package]), flush=True)
+                source_path = local_sources[package]
+                recipe_path, materialized_source = local_source_recipe(root, package, source_path, temp_root)
+                if is_local_source_archive(source_path):
+                    print(
+                        "# local-source-archive {}={} extracted={}".format(
+                            package, source_path, materialized_source
+                        ),
+                        flush=True,
+                    )
+                else:
+                    print("# local-source {}={}".format(package, source_path), flush=True)
             command = base_build_command(args)
             command.extend(["--recipe", recipe_path])
             run(command, dry_run=args.dry_run, env=env)
@@ -592,7 +677,7 @@ def parse_args():
         action="append",
         default=[],
         help=(
-            "Use a local source checkout for a bundled package with package=path syntax. "
+            "Use a local source checkout or archive for a bundled package with package=path syntax. "
             "Repeat for multiple packages. Only valid with explicit --package selections."
         ),
     )
@@ -602,7 +687,7 @@ def parse_args():
         default=[],
         help=(
             "Require a local source checkout to be exactly at package=ref before building. "
-            "Repeat for multiple packages. Use with --local-source."
+            "Repeat for multiple packages. Use only with git checkout --local-source paths."
         ),
     )
     build.add_argument(

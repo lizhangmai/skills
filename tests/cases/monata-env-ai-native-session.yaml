@@ -61,6 +61,7 @@
       "--require-command",
       "missing-required-commands",
       "git-unavailable",
+      "local_source_archive_trust",
       "choose-container-with-required-commands",
       "use-local-container-image",
       "fakeroot",

@@ -1437,6 +1437,62 @@ def test_plan_can_write_manifest_seed(tmp_path):
     assert data["verification"]["upstream_installed"] is None
 
 
+def test_plan_refuses_to_overwrite_manifest_with_execution_evidence(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    manifest = output_dir / "monata-env-install-manifest.json"
+    write_monata_workspace(workspace)
+    write_auditable_manifest(manifest)
+    original = json.loads(manifest.read_text(encoding="utf-8"))
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--write-manifest",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 1
+    assert "Refusing to overwrite existing manifest with recorded execution evidence" in result.stdout
+    assert json.loads(manifest.read_text(encoding="utf-8")) == original
+
+
+def test_plan_can_explicitly_overwrite_existing_manifest_evidence(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    manifest = output_dir / "monata-env-install-manifest.json"
+    write_monata_workspace(workspace)
+    write_auditable_manifest(manifest)
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--write-manifest",
+            "--overwrite-manifest",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert data["execution"]["commands_run"] == []
+    assert data["execution"]["artifacts"] == []
+    assert data["verification"]["smoke"] is None
+
+
 def test_execute_runbook_captures_stdout_and_records_verification(tmp_path):
     manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
     plan_path = tmp_path / "plan.json"
@@ -2139,6 +2195,45 @@ def test_audit_manifest_reports_evidence_for_user_facing_status(tmp_path):
     assert evidence["artifacts"]["missing_packages"] == []
     assert evidence["verification"]["smoke"] == "passed"
     assert evidence["verification"]["upstream_installed"] == "not-requested"
+
+
+def test_audit_manifest_can_require_package_artifacts(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    write_auditable_manifest(manifest)
+
+    result = run([sys.executable, AUDIT_SCRIPT, "--manifest", manifest, "--require-artifacts", "--format", "json"])
+
+    assert result.returncode == 1
+    data = json.loads(result.stdout)
+    requirements = {item["id"]: item for item in data["requirements"]}
+    assert data["status"] == "blocked"
+    assert requirements["package-artifacts-recorded"]["ok"] is False
+    assert requirements["package-artifacts-recorded"]["missing"] == ["ngspice", "openvaf-r", "klayout", "xschem"]
+    assert data["next_actions"][0]["id"] == "record-package-artifacts"
+
+
+def test_plan_final_audit_requires_package_artifact_evidence(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    write_monata_workspace(workspace)
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    runbook = {step["id"]: step for step in data["runbook"]}
+    assert "--require-artifacts" in runbook["audit"]["command"]
 
 
 def test_audit_summary_prints_user_facing_status_report(tmp_path):

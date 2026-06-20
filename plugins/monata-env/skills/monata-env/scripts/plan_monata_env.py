@@ -312,6 +312,7 @@ def audit_command(manifest_path):
         "--manifest",
         str(manifest_path),
         "--check-live",
+        "--require-artifacts",
         "--format",
         "json",
     ]
@@ -1148,6 +1149,11 @@ def parse_args():
     )
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
+    parser.add_argument(
+        "--overwrite-manifest",
+        action="store_true",
+        help="Allow --write-manifest to replace an existing manifest that already contains execution evidence.",
+    )
     return parser.parse_args()
 
 
@@ -1160,9 +1166,24 @@ def print_summary(plan):
         print(f"question[{question['id']}]: {question['question']}")
 
 
-def write_manifest_seed(plan):
+def manifest_has_execution_evidence(manifest):
+    execution = manifest.get("execution", {})
+    verification = manifest.get("verification", {})
+    return bool(execution.get("commands_run")) or bool(execution.get("artifacts")) or any(
+        value is not None for value in verification.values()
+    )
+
+
+def write_manifest_seed(plan, overwrite=False):
     path = Path(plan["manifest"]["path"])
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and not overwrite:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if manifest_has_execution_evidence(existing):
+            raise SystemExit(
+                "Refusing to overwrite existing manifest with recorded execution evidence: "
+                f"{path}. Use --session-dir for a fresh run or --overwrite-manifest to reset it."
+            )
     manifest = {
         "schema_version": 1,
         "plan": plan,
@@ -1195,7 +1216,7 @@ def main():
         host_pixi_root=args.host_pixi_root,
     )
     if args.write_manifest:
-        write_manifest_seed(plan)
+        write_manifest_seed(plan, overwrite=args.overwrite_manifest)
     if args.format == "summary":
         print_summary(plan)
     else:

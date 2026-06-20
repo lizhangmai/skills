@@ -362,6 +362,20 @@ def artifact_evidence(manifest):
     }
 
 
+def package_artifacts_recorded(manifest):
+    artifacts = artifact_evidence(manifest)
+    missing = artifacts["missing_packages"]
+    return requirement(
+        "package-artifacts-recorded",
+        "Package artifacts are recorded for every required tool",
+        not missing,
+        "ok" if not missing else "missing-artifacts",
+        expected=EXPECTED_TOOLS,
+        present=artifacts["present_packages"],
+        missing=missing,
+    )
+
+
 def verification_status(manifest, recommendation, live):
     verification = manifest.get("verification", {})
     smoke = verification.get("smoke")
@@ -433,6 +447,16 @@ def next_actions(requirements, recommendation):
                 "prompt": "The installed-tool smoke verification is missing or failed. Inspect which command is missing or failing before finalizing.",
             }
         )
+    artifact_requirement = by_id.get("package-artifacts-recorded")
+    if artifact_requirement and not artifact_requirement["ok"]:
+        actions.append(
+            {
+                "id": "record-package-artifacts",
+                "title": "Record local channel package artifacts",
+                "requires_user_input": False,
+                "prompt": "The manifest is missing package artifact evidence. Run the check_channel or build runbook step so record_after captures ngspice/openvaf-r/KLayout/Xschem artifacts from the local channel.",
+            }
+        )
     if recommendation["status"] == "not-run" and recommendation.get("recommended"):
         actions.append(
             {
@@ -445,7 +469,7 @@ def next_actions(requirements, recommendation):
     return actions
 
 
-def audit(manifest_path, check_live=False):
+def audit(manifest_path, check_live=False, require_artifacts=False):
     manifest = load_json(manifest_path)
     requirements = [
         expected_tool_plan(manifest),
@@ -453,6 +477,8 @@ def audit(manifest_path, check_live=False):
         install_succeeded(manifest),
         smoke_passed(manifest),
     ]
+    if require_artifacts:
+        requirements.append(package_artifacts_recorded(manifest))
     if check_live:
         requirements.append(live_state_requirement(manifest))
     recommendation = upstream_recommendation(manifest)
@@ -514,13 +540,22 @@ def parse_args():
         action="store_true",
         help="Also inspect current PATH shims and pixi global list --json for the target environment.",
     )
+    parser.add_argument(
+        "--require-artifacts",
+        action="store_true",
+        help="Fail when the manifest does not record local package artifacts for every required tool.",
+    )
     parser.add_argument("--format", choices=("json", "summary"), default="summary")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    report = audit(args.manifest.expanduser().resolve(), check_live=args.check_live)
+    report = audit(
+        args.manifest.expanduser().resolve(),
+        check_live=args.check_live,
+        require_artifacts=args.require_artifacts,
+    )
     if args.format == "json":
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

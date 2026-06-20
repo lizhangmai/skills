@@ -209,6 +209,11 @@ directory.
      --format json
    ```
 
+   `--write-manifest` refuses to overwrite a manifest that already has recorded
+   commands, package artifacts, or verification payloads. Use a new
+   `--session-dir` for a fresh run. Use `--overwrite-manifest` only when the
+   user explicitly wants to reset that manifest and discard its evidence.
+
    For an isolated live install/smoke check that reuses a trusted host pixi
    binary without mutating the host pixi global state, pass the pixi install
    root explicitly. The planner will include a ready-to-run
@@ -562,6 +567,7 @@ directory.
    if python scripts/audit_monata_env_manifest.py \
        --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
        --check-live \
+       --require-artifacts \
        --format json > "$AUDIT_JSON" 2> "$AUDIT_ERR"; then
      AUDIT_RC=0
    else
@@ -570,7 +576,7 @@ directory.
    python scripts/record_monata_env_session.py \
      --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
      --command-kind audit \
-     --command "python scripts/audit_monata_env_manifest.py --manifest ... --check-live --format json" \
+     --command "python scripts/audit_monata_env_manifest.py --manifest ... --check-live --require-artifacts --format json" \
      --returncode "$AUDIT_RC" \
      --stdout-file "$AUDIT_JSON" \
      --stderr-file "$AUDIT_ERR" \
@@ -584,6 +590,7 @@ directory.
    python scripts/audit_monata_env_manifest.py \
      --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
      --check-live \
+     --require-artifacts \
      --format summary
    ```
 

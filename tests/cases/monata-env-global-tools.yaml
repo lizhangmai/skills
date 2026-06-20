@@ -24,13 +24,16 @@
       "klayout=0.30.9",
       "xschem=3.4.7",
       "plan_monata_env.py",
+      "record_monata_env_session.py",
       "smoke_monata_env_tools.py",
+      "verification.smoke",
       "monata-env-install-manifest.json"
     ],
     "installed_files": [
       "SKILL.md",
       "scripts/detect_monata_tools.py",
       "scripts/plan_monata_env.py",
+      "scripts/record_monata_env_session.py",
       "scripts/smoke_monata_env_tools.py",
       "scripts/test_monata_env_upstream.py"
     ]

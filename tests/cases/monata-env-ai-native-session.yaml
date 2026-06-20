@@ -21,8 +21,11 @@
       "questions",
       "scripts/smoke_monata_env_tools.py",
       "scripts/test_monata_env_upstream.py",
+      "scripts/record_monata_env_session.py",
       "upstream-installed",
       "monata-env-install-manifest.json",
+      "verification.smoke",
+      "verification.upstream_installed",
       "recommended commands",
       "fallback"
     ],
@@ -30,6 +33,7 @@
       "SKILL.md",
       "scripts/detect_monata_tools.py",
       "scripts/plan_monata_env.py",
+      "scripts/record_monata_env_session.py",
       "scripts/smoke_monata_env_tools.py",
       "scripts/test_monata_env_upstream.py"
     ]

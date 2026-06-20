@@ -11,6 +11,9 @@ SMOKE_SCRIPT = REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / 
 UPSTREAM_SCRIPT = (
     REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "test_monata_env_upstream.py"
 )
+RECORD_SCRIPT = (
+    REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "record_monata_env_session.py"
+)
 RATTLER_SCRIPT = (
     REPO_ROOT
     / "plugins"
@@ -74,6 +77,22 @@ def git_repo_with_tagged_parent(path: Path, tag: str) -> None:
 def write_monata_workspace(path: Path) -> None:
     path.mkdir(parents=True)
     (path / "pyproject.toml").write_text('[project]\nname = "monata"\n', encoding="utf-8")
+
+
+def write_manifest_seed(path: Path) -> None:
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "plan": {"mode": "ai-native-session", "env_name": "monata-env"},
+                "execution": {"commands_run": [], "artifacts": []},
+                "verification": {"smoke": None, "upstream_installed": None},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def test_plan_reports_ref_mismatch_and_recommended_commands(tmp_path):
@@ -208,6 +227,114 @@ def test_plan_can_write_manifest_seed(tmp_path):
     assert data["execution"]["commands_run"] == []
     assert data["verification"]["smoke"] is None
     assert data["verification"]["upstream_installed"] is None
+
+
+def test_record_manifest_appends_command_and_verification_payload(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    smoke_output = tmp_path / "smoke.json"
+    payload = {"ok": True, "tools": {"ngspice": {"ok": True}}}
+    write_manifest_seed(manifest)
+    smoke_output.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    result = run(
+        [
+            sys.executable,
+            RECORD_SCRIPT,
+            "--manifest",
+            manifest,
+            "--command-kind",
+            "smoke",
+            "--command",
+            "python scripts/smoke_monata_env_tools.py --format json",
+            "--returncode",
+            "0",
+            "--stdout-file",
+            smoke_output,
+            "--verification",
+            f"smoke={smoke_output}",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert data["execution"]["commands_run"] == [
+        {
+            "kind": "smoke",
+            "command": "python scripts/smoke_monata_env_tools.py --format json",
+            "returncode": 0,
+            "stdout_file": str(smoke_output.resolve()),
+        }
+    ]
+    assert data["verification"]["smoke"] == payload
+
+
+def test_record_manifest_collects_package_artifacts(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    linux64 = tmp_path / "channel" / "linux-64"
+    artifact = linux64 / "klayout-0.30.9-hb0f4dca_0.conda"
+    write_manifest_seed(manifest)
+    linux64.mkdir(parents=True)
+    artifact.write_text("package-bytes", encoding="utf-8")
+
+    result = run(
+        [
+            sys.executable,
+            RECORD_SCRIPT,
+            "--manifest",
+            manifest,
+            "--artifact-dir",
+            tmp_path / "channel",
+            "--package",
+            "klayout",
+            "--package",
+            "xschem",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert data["execution"]["artifacts"] == [
+        {
+            "package": "klayout",
+            "path": str(artifact.resolve()),
+            "filename": artifact.name,
+            "size": len("package-bytes"),
+        }
+    ]
+
+
+def test_record_manifest_preserves_failed_command_when_verification_json_is_invalid(tmp_path):
+    manifest = tmp_path / "channel" / "monata-env-install-manifest.json"
+    smoke_output = tmp_path / "broken-smoke.json"
+    write_manifest_seed(manifest)
+    smoke_output.write_text("traceback, not json\n", encoding="utf-8")
+
+    result = run(
+        [
+            sys.executable,
+            RECORD_SCRIPT,
+            "--manifest",
+            manifest,
+            "--command-kind",
+            "smoke",
+            "--command",
+            "python scripts/smoke_monata_env_tools.py --format json",
+            "--returncode",
+            "1",
+            "--stdout-file",
+            smoke_output,
+            "--verification",
+            f"smoke={smoke_output}",
+        ]
+    )
+
+    assert result.returncode == 1
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert data["execution"]["commands_run"][0]["returncode"] == 1
+    assert data["execution"]["commands_run"][0]["stdout_file"] == str(smoke_output.resolve())
+    assert data["verification"]["smoke"]["ok"] is False
+    assert data["verification"]["smoke"]["reason"] == "invalid-json"
+    assert data["verification"]["smoke"]["path"] == str(smoke_output.resolve())
 
 
 def test_rattler_local_source_ref_rejects_mismatched_checkout(tmp_path):

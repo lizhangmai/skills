@@ -230,7 +230,20 @@ directory.
 10. Verify the exposed circuit tools directly. Do not import `monata`:
 
    ```bash
-   python scripts/smoke_monata_env_tools.py --format json
+   SMOKE_JSON="$CONDA_BUILD_OUTPUT_DIR/monata-env-smoke.json"
+   if python scripts/smoke_monata_env_tools.py --format json > "$SMOKE_JSON"; then
+     SMOKE_RC=0
+   else
+     SMOKE_RC=$?
+   fi
+   python scripts/record_monata_env_session.py \
+     --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+     --command-kind smoke \
+     --command "python scripts/smoke_monata_env_tools.py --format json" \
+     --returncode "$SMOKE_RC" \
+     --stdout-file "$SMOKE_JSON" \
+     --verification smoke="$SMOKE_JSON"
+   test "$SMOKE_RC" -eq 0
    ```
 
    This minimal smoke test runs `ngspice`, compiles small OSDI models with
@@ -241,11 +254,24 @@ directory.
    upstream-installed profile:
 
    ```bash
-   python scripts/test_monata_env_upstream.py \
-     --format json \
-     --profile basic \
-     --klayout-source "$(realpath ../circuit/klayout)" \
-     --xschem-source "$(realpath ../circuit/xschem)"
+   UPSTREAM_JSON="$CONDA_BUILD_OUTPUT_DIR/monata-env-upstream-installed.json"
+   if python scripts/test_monata_env_upstream.py \
+       --format json \
+       --profile basic \
+       --klayout-source "$(realpath ../circuit/klayout)" \
+       --xschem-source "$(realpath ../circuit/xschem)" > "$UPSTREAM_JSON"; then
+     UPSTREAM_RC=0
+   else
+     UPSTREAM_RC=$?
+   fi
+   python scripts/record_monata_env_session.py \
+     --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+     --command-kind upstream_installed_tests \
+     --command "python scripts/test_monata_env_upstream.py --format json --profile basic ..." \
+     --returncode "$UPSTREAM_RC" \
+     --stdout-file "$UPSTREAM_JSON" \
+     --verification upstream_installed="$UPSTREAM_JSON"
+   test "$UPSTREAM_RC" -eq 0
    ```
 
    This profile uses upstream test assets but calls the installed tools. The
@@ -254,10 +280,30 @@ directory.
    test tree. Use `--profile full` only when the user accepts longer runtime
    and higher dependency/display risk.
 
-12. Write or update `monata-env-install-manifest.json` in the output channel or
-   another user-approved report directory. Include the plan JSON, exact
-   commands run, package artifacts, local-source refs, pixi global environment
-   name, smoke-test JSON, and upstream-installed test JSON when run.
+12. Use `scripts/record_monata_env_session.py` after build, install, smoke, and
+   upstream test commands. The manifest must keep the plan JSON, exact commands
+   run, package artifacts, local-source refs, pixi global environment name,
+   `verification.smoke`, and `verification.upstream_installed` when run.
+
+   After a build command, record generated artifacts without requiring
+   `conda index`:
+
+   ```bash
+   python scripts/record_monata_env_session.py \
+     --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+     --command-kind build \
+     --command "python scripts/rattler_channel.py build --recipe-set circuit-toolchain ..." \
+     --returncode "$BUILD_RC" \
+     --artifact-dir "$CONDA_BUILD_OUTPUT_DIR" \
+     --package ngspice \
+     --package openvaf-r \
+     --package klayout \
+     --package xschem
+   ```
+
+   After the pixi global install, record the exact install command and return
+   code. If a step fails, still record its command and return code before
+   diagnosing or asking the user for a fallback such as a local source checkout.
 
 ## Existing Circuit-Tool Environment
 
@@ -265,7 +311,20 @@ If the detected circuit tools are already available on `PATH`, still verify
 the commands directly and report that no pixi global install was needed:
 
 ```bash
-python scripts/smoke_monata_env_tools.py --format json
+SMOKE_JSON="$CONDA_BUILD_OUTPUT_DIR/monata-env-smoke.json"
+if python scripts/smoke_monata_env_tools.py --format json > "$SMOKE_JSON"; then
+  SMOKE_RC=0
+else
+  SMOKE_RC=$?
+fi
+python scripts/record_monata_env_session.py \
+  --manifest "$CONDA_BUILD_OUTPUT_DIR/monata-env-install-manifest.json" \
+  --command-kind smoke \
+  --command "python scripts/smoke_monata_env_tools.py --format json" \
+  --returncode "$SMOKE_RC" \
+  --stdout-file "$SMOKE_JSON" \
+  --verification smoke="$SMOKE_JSON"
+test "$SMOKE_RC" -eq 0
 ```
 
 Use this shortcut only when all required executables are already on `PATH`.

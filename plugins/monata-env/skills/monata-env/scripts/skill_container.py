@@ -121,6 +121,12 @@ def preflight_next_actions(text):
     return []
 
 
+def preflight_error_code(reason, text):
+    if preflight_next_actions(text):
+        return "registry-download-failed"
+    return reason
+
+
 def run_preflight(args, dirs):
     command = build_preflight_command(args, dirs)
     if not command:
@@ -129,10 +135,13 @@ def run_preflight(args, dirs):
     env.update(host_env(dirs))
     result = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if result.returncode != 0:
-        next_actions = preflight_next_actions(result.stdout + "\n" + result.stderr)
+        output_text = result.stdout + "\n" + result.stderr
+        next_actions = preflight_next_actions(output_text)
+        reason = "preflight-command-failed"
         payload = {
             "ok": False,
-            "reason": "preflight-command-failed",
+            "reason": reason,
+            "error": {"code": preflight_error_code(reason, output_text)},
             "returncode": result.returncode,
             "required_commands": args.require_command,
             "image": str(args.image),
@@ -157,6 +166,7 @@ def run_preflight(args, dirs):
                 {
                     "ok": False,
                     "reason": "missing-required-commands",
+                    "error": {"code": "missing-required-commands"},
                     "missing": missing,
                     "required_commands": args.require_command,
                     "image": str(args.image),

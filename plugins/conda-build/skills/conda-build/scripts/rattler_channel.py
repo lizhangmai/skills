@@ -172,14 +172,28 @@ def is_local_source_archive(path):
     return any(name.endswith(suffix) for suffix in SOURCE_ARCHIVE_SUFFIXES)
 
 
+def emit_structured_error(code, message, **details):
+    payload = {
+        "ok": False,
+        "error": {"code": code},
+        "message": message,
+    }
+    payload.update(details)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+
+
 def validate_local_source_refs(local_sources, local_source_refs):
     missing_sources = sorted(set(local_source_refs) - set(local_sources))
     if missing_sources:
-        raise SystemExit(
-            "--local-source-ref provided without --local-source for package(s): {}".format(
-                ", ".join(missing_sources)
-            )
+        message = "--local-source-ref provided without --local-source for package(s): {}".format(
+            ", ".join(missing_sources)
         )
+        emit_structured_error(
+            "local-source-missing-for-ref",
+            message,
+            packages=missing_sources,
+        )
+        raise SystemExit(message)
     for package, ref in sorted(local_source_refs.items()):
         source_path = local_sources[package]
         if is_local_source_archive(source_path):
@@ -197,17 +211,31 @@ def validate_local_source_refs(local_sources, local_source_refs):
             )
         target = git_commit(source_path, ref)
         if target is None:
-            raise SystemExit(
-                "Local source for {} does not contain required ref {}: {}".format(
-                    package, ref, source_path
-                )
+            message = "Local source for {} does not contain required ref {}: {}".format(
+                package, ref, source_path
             )
+            emit_structured_error(
+                "local-source-target-ref-missing",
+                message,
+                package=package,
+                source=str(source_path),
+                target_ref=ref,
+            )
+            raise SystemExit(message)
         if head != target:
-            raise SystemExit(
-                "Local source for {} at {} HEAD {} does not match required ref {} ({})".format(
-                    package, source_path, head, ref, target
-                )
+            message = "Local source for {} at {} HEAD {} does not match required ref {} ({})".format(
+                package, source_path, head, ref, target
             )
+            emit_structured_error(
+                "local-source-ref-mismatch",
+                message,
+                package=package,
+                source=str(source_path),
+                head=head,
+                target_ref=ref,
+                target_commit=target,
+            )
+            raise SystemExit(message)
 
 
 def quote_yaml_string(value):

@@ -15,6 +15,9 @@ OUTPUT_DIR_ENV_VAR = "CONDA_BUILD_OUTPUT_DIR"
 RATTLER_OUTPUT_DIR_ENV_VAR = "CONDA_BLD_PATH"
 DEFAULT_CHANNELS = ["https://prefix.dev/conda-forge"]
 FIXTURE_DIR = SKILL_DIR / "assets" / "recipe-sets" / "circuit-toolchain" / "smoke-tests" / "fixtures"
+BASELINE_PROFILE = "monata-env-baseline"
+FULL_PROFILE = "full-toolchain"
+SMOKE_PROFILES = (BASELINE_PROFILE, FULL_PROFILE)
 
 
 def default_output_dir() -> Path:
@@ -32,7 +35,7 @@ def resolve_output_dir(value) -> Path:
     return default_output_dir()
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--output-dir",
@@ -52,10 +55,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--keep-work-dir", action="store_true", help="Do not delete the temporary pixi project.")
     parser.add_argument("--pixi", default="pixi", help="pixi executable to use.")
+    parser.add_argument(
+        "--profile",
+        choices=SMOKE_PROFILES,
+        default=BASELINE_PROFILE,
+        help="Artifact smoke profile. Defaults to the Monata global-tool baseline only.",
+    )
     parser.add_argument("--inside-toolchain", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--inside-profile", choices=SMOKE_PROFILES, help=argparse.SUPPRESS)
     parser.add_argument("--inside-trilinos17", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--fixtures", type=Path, default=FIXTURE_DIR, help=argparse.SUPPRESS)
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def run(command, cwd=None, timeout=None):
@@ -90,35 +100,53 @@ def assert_file(path: Path, minimum_size: int = 1) -> None:
         raise SystemExit(f"Expected file is too small: {path}")
 
 
-def write_manifest(path, output_dir, channels):
+def profile_dependencies(profile):
+    baseline = {
+        "python": ">=3.12,<3.13",
+        "ngspice": "46.0.*",
+        "openvaf-r": "0.4.0.*",
+        "klayout": "0.30.9.*",
+        "xschem": "3.4.7.*",
+    }
+    if profile == BASELINE_PROFILE:
+        return baseline
+    if profile == FULL_PROFILE:
+        return {
+            **baseline,
+            "numpy": "*",
+            "adms": "2.3.7.*",
+            "vacask": "0.1.0.*",
+            "xdm": "2.7.0.*",
+            "xyce": "7.11.0.*",
+            "monata": "0.1.0.*",
+            "inspice": "1.7.0.3.*",
+        }
+    raise SystemExit(f"Unknown smoke profile: {profile}")
+
+
+def dependency_lines(dependencies):
+    return "\n".join(f'{name} = "{value}"' for name, value in dependencies.items())
+
+
+def write_manifest(path, output_dir, channels, profile=BASELINE_PROFILE):
     channel_values = [output_dir.resolve().as_uri(), *channels]
     channel_text = ", ".join('"{}"'.format(channel) for channel in channel_values)
+    dependencies = dependency_lines(profile_dependencies(profile))
     path.write_text(
         f"""[workspace]
 name = "conda-build-circuit-artifact-smoke"
 channels = [{channel_text}]
 platforms = ["linux-64"]
 
-[feature.toolchain.dependencies]
-python = ">=3.12,<3.13"
-numpy = "*"
-adms = "2.3.7.*"
-ngspice = "46.0.*"
-openvaf-r = "0.4.0.*"
-klayout = "0.30.9.*"
-xschem = "3.4.7.*"
-vacask = "0.1.0.*"
-xdm = "2.7.0.*"
-xyce = "7.11.0.*"
-monata = "0.1.0.*"
-inspice = "1.7.0.3.*"
+[feature."{profile}".dependencies]
+{dependencies}
 
 [feature.trilinos17.dependencies]
 python = ">=3.12,<3.13"
 trilinos = "17.1.0.*"
 
 [environments]
-toolchain = ["toolchain"]
+"{profile}" = ["{profile}"]
 trilinos17 = ["trilinos17"]
 """,
         encoding="utf-8",
@@ -232,6 +260,27 @@ def run_toolchain_smoke(fixtures: Path) -> int:
     return 0
 
 
+def run_baseline_smoke(fixtures: Path) -> int:
+    fixtures = fixtures.resolve()
+    if not fixtures.exists():
+        raise SystemExit(f"Fixture directory not found: {fixtures}")
+    with tempfile.TemporaryDirectory(prefix="conda-build-circuit-smoke-") as tmp:
+        work_dir = Path(tmp)
+        smoke_ngspice(fixtures, work_dir)
+        smoke_openvaf(fixtures, work_dir)
+        smoke_klayout()
+        smoke_xschem()
+    return 0
+
+
+def run_profile_smoke(profile, fixtures):
+    if profile == BASELINE_PROFILE:
+        return run_baseline_smoke(fixtures)
+    if profile == FULL_PROFILE:
+        return run_toolchain_smoke(fixtures)
+    raise SystemExit(f"Unknown smoke profile: {profile}")
+
+
 def run_trilinos17_smoke() -> int:
     prefix = Path(os.environ.get("CONDA_PREFIX", ""))
     if not prefix.exists():
@@ -262,11 +311,28 @@ def run_pixi_smoke(args: argparse.Namespace) -> int:
 
     try:
         manifest = work_dir / "pixi.toml"
-        write_manifest(manifest, output_dir, channels)
+        write_manifest(manifest, output_dir, channels, profile=args.profile)
         script = Path(__file__).resolve()
         fixtures = FIXTURE_DIR.resolve()
-        run([args.pixi, "run", "--manifest-path", manifest, "-e", "toolchain", "python", script, "--inside-toolchain", "--fixtures", fixtures], cwd=work_dir)
-        run([args.pixi, "run", "--manifest-path", manifest, "-e", "trilinos17", "python", script, "--inside-trilinos17"], cwd=work_dir)
+        run(
+            [
+                args.pixi,
+                "run",
+                "--manifest-path",
+                manifest,
+                "-e",
+                args.profile,
+                "python",
+                script,
+                "--inside-profile",
+                args.profile,
+                "--fixtures",
+                fixtures,
+            ],
+            cwd=work_dir,
+        )
+        if args.profile == FULL_PROFILE:
+            run([args.pixi, "run", "--manifest-path", manifest, "-e", "trilinos17", "python", script, "--inside-trilinos17"], cwd=work_dir)
         print(f"PASS: pixi installed and smoke-tested artifacts from {output_dir}")
         if args.keep_work_dir or args.work_dir:
             print(f"Work directory: {work_dir}")
@@ -280,6 +346,8 @@ def main() -> int:
     args = parse_args()
     if args.inside_toolchain:
         return run_toolchain_smoke(args.fixtures)
+    if args.inside_profile:
+        return run_profile_smoke(args.inside_profile, args.fixtures)
     if args.inside_trilinos17:
         return run_trilinos17_smoke()
     return run_pixi_smoke(args)

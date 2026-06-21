@@ -1,5 +1,10 @@
 # Monata Env Design
 
+> Historical note: this document records the rename from `monata-sim-env` to
+> `monata-env`. The current implementation and executable guidance live in
+> `plugins/monata-env/skills/monata-env/SKILL.md`; do not treat this historical
+> design as the active install runbook.
+
 ## Goal
 
 Rename `monata-sim-env` to `monata-env` and narrow the skill to managing the

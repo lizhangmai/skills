@@ -530,43 +530,63 @@ def runbook(
     ]
 
 
-def container_runner_prefix(root, output_dir, container_image, helper_script, state_dir, extra_options=None):
+def container_runner_argv(root, output_dir, container_image, helper_script, state_dir, extra_options=None):
     skills_repo_root = find_skills_repo_root(helper_script)
-    repo_root_option = ""
+    command = [
+        "python",
+        "scripts/skill_container.py",
+        "--state-dir",
+        str(state_dir),
+    ]
     if skills_repo_root:
-        repo_root_option = f"--repo-root {shlex.quote(str(skills_repo_root))} "
-    options = "".join(extra_options or [])
-    return (
-        "python scripts/skill_container.py "
-        f"--state-dir {shlex.quote(str(state_dir))} "
-        f"{repo_root_option}"
-        f"--workspace {shlex.quote(str(Path(root).resolve()))} "
-        f"--channel {shlex.quote(str(output_dir))} "
-        f"--image {shlex.quote(container_image)} "
-        f"{options}"
+        command.extend(["--repo-root", str(skills_repo_root)])
+    command.extend(
+        [
+            "--workspace",
+            str(Path(root).resolve()),
+            "--channel",
+            str(output_dir),
+            "--image",
+            container_image,
+        ]
     )
+    command.extend(extra_options or [])
+    return command
+
+
+def container_runner_prefix(root, output_dir, container_image, helper_script, state_dir, extra_options=None):
+    return command_string(container_runner_argv(root, output_dir, container_image, helper_script, state_dir, extra_options))
 
 
 def container_planner_command(root, output_dir, container_image, helper_script, state_dir, env_name):
     skills_repo_root = find_skills_repo_root(helper_script)
     container_plan_script = "/mnt/skills/scripts/plan_monata_env.py"
-    container_helper_arg = ""
+    plan_args = [
+        "python3",
+        container_plan_script,
+        "--root",
+        "/mnt/project",
+        "--output-dir",
+        "/tmp/skill-channel",
+        "--session-dir",
+        "/tmp/skill-home/monata-env-session",
+        "--env-name",
+        env_name,
+    ]
     if skills_repo_root:
         container_plan_script = "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py"
-        container_helper_arg = (
-            " --conda-build-helper "
-            "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py"
+        plan_args[1] = container_plan_script
+        plan_args.extend(
+            [
+                "--conda-build-helper",
+                "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py",
+            ]
         )
-    return (
-        container_runner_prefix(root, output_dir, container_image, helper_script, state_dir)
-        + "--require-command python3 "
-        "--dry-run -- "
-        f"bash -lc 'cd /mnt/project && python3 {container_plan_script} "
-        f"--root /mnt/project --output-dir /tmp/skill-channel "
-        f"--session-dir /tmp/skill-home/monata-env-session "
-        f"--env-name {shlex.quote(env_name)}{container_helper_arg} "
-        "--write-manifest --format json'"
-    )
+    plan_args.extend(["--write-manifest", "--format", "json"])
+    inner = "cd /mnt/project && {}".format(command_string(plan_args))
+    command = container_runner_argv(root, output_dir, container_image, helper_script, state_dir)
+    command.extend(["--require-command", "python3", "--dry-run", "--", "bash", "-lc", inner])
+    return command_string(command)
 
 
 def test_image_prepare_command(image_path, host_pixi_root=None, remote=False):
@@ -586,10 +606,11 @@ def test_image_prepare_command(image_path, host_pixi_root=None, remote=False):
 
 
 def test_image_validate_command(root, output_dir, image_path, helper_script, state_dir):
-    command = container_runner_prefix(root, output_dir, str(image_path), helper_script, state_dir)
+    command = container_runner_argv(root, output_dir, str(image_path), helper_script, state_dir)
     for required in TEST_IMAGE_REQUIRED_COMMANDS:
-        command += f"--require-command {shlex.quote(required)} "
-    return command + "-- true"
+        command.extend(["--require-command", required])
+    command.extend(["--", "true"])
+    return command_string(command)
 
 
 def test_image_plan(root, output_dir, image_path, helper_script, state_dir, host_pixi_root=None):
@@ -619,7 +640,18 @@ def container_install_smoke_command(
     container_python = "/usr/local/bin/python3"
     plan_script = "/mnt/skills/scripts/plan_monata_env.py"
     execute_script = "/mnt/skills/scripts/execute_monata_env_runbook.py"
-    container_helper_arg = ""
+    plan_args = [
+        container_python,
+        plan_script,
+        "--root",
+        "/mnt/project",
+        "--output-dir",
+        "/tmp/skill-channel",
+        "--session-dir",
+        "/tmp/skill-home/monata-env-session",
+        "--env-name",
+        env_name,
+    ]
     skills_repo_root = find_skills_repo_root(helper_script)
     if skills_repo_root:
         plan_script = "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py"
@@ -627,54 +659,63 @@ def container_install_smoke_command(
             "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/"
             "execute_monata_env_runbook.py"
         )
-        container_helper_arg = (
-            " --conda-build-helper "
-            "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py"
+        plan_args[1] = plan_script
+        plan_args.extend(
+            [
+                "--conda-build-helper",
+                "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py",
+            ]
         )
     pixi_binary = Path(host_pixi_root) / "bin" / "pixi"
     bind = f"{pixi_binary}:/opt/host-pixi/bin/pixi:ro"
-    source_options = []
     source_binds = []
     if include_upstream:
         for package, source_path in (local_source_paths or {}).items():
             container_source = f"/mnt/sources/{package}"
-            source_binds.append(f"--bind {shlex.quote(f'{source_path}:{container_source}:ro')} ")
-            source_options.append(f"--local-source {package}={container_source} ")
-        source_options.append(f"--upstream-profile {upstream_profile} ")
-    runbook_steps = "--step check_channel --step install --step smoke"
+            source_binds.extend(["--bind", f"{source_path}:{container_source}:ro"])
+            plan_args.extend(["--local-source", f"{package}={container_source}"])
+        plan_args.extend(["--upstream-profile", upstream_profile])
+    plan_args.extend(["--write-manifest", "--format", "json"])
+    runbook_steps = ["--step", "check_channel", "--step", "install", "--step", "smoke"]
     if include_upstream:
-        runbook_steps += " --step upstream_installed_tests"
-    runbook_steps += " --step audit"
-    return (
-        container_runner_prefix(
-            root,
-            output_dir,
-            container_image,
-            helper_script,
-            state_dir,
-            extra_options=[
-                f"--bind {shlex.quote(bind)} ",
-                *source_binds,
-                "--prepend-path /tmp/skill-home/.pixi/bin ",
-                "--prepend-path /opt/host-pixi/bin ",
-            ],
-        )
-        + f"--require-command {container_python} "
-        "--require-command pixi "
-        "-- "
-        "bash -c 'cd /mnt/project && "
+        runbook_steps.extend(["--step", "upstream_installed_tests"])
+    runbook_steps.extend(["--step", "audit"])
+    execute_args = [
+        container_python,
+        execute_script,
+        "--manifest",
+        "/tmp/skill-home/monata-env-session/monata-env-install-manifest.json",
+        *runbook_steps,
+        "--allow-confirmation-required",
+        "--format",
+        "json",
+    ]
+    inner = (
+        "cd /mnt/project && "
         "mkdir -p /tmp/skill-home/monata-env-session && "
-        f"{container_python} {plan_script} "
-        "--root /mnt/project --output-dir /tmp/skill-channel "
-        f"--session-dir /tmp/skill-home/monata-env-session "
-        f"--env-name {shlex.quote(env_name)}{container_helper_arg} "
-        f"{''.join(source_options)}"
-        "--write-manifest --format json "
-        "> /tmp/skill-home/monata-env-session/plan.json && "
-        f"{container_python} {execute_script} "
-        "--manifest /tmp/skill-home/monata-env-session/monata-env-install-manifest.json "
-        f"{runbook_steps} --allow-confirmation-required --format json'"
+        "{} > /tmp/skill-home/monata-env-session/plan.json && {}".format(
+            command_string(plan_args),
+            command_string(execute_args),
+        )
     )
+    command = container_runner_argv(
+        root,
+        output_dir,
+        container_image,
+        helper_script,
+        state_dir,
+        extra_options=[
+            "--bind",
+            bind,
+            *source_binds,
+            "--prepend-path",
+            "/tmp/skill-home/.pixi/bin",
+            "--prepend-path",
+            "/opt/host-pixi/bin",
+        ],
+    )
+    command.extend(["--require-command", container_python, "--require-command", "pixi", "--", "bash", "-c", inner])
+    return command_string(command)
 
 
 def decisions(

@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -531,6 +532,32 @@ def test_plan_can_select_full_upstream_installed_profile(tmp_path):
     ]
     assert "--upstream-profile full" in upstream
     assert "--step check_channel --step install --step smoke --step upstream_installed_tests --step audit" in upstream
+
+
+def test_upstream_tester_reports_structured_missing_source_errors(tmp_path):
+    work_dir = tmp_path / "work"
+    missing_klayout = tmp_path / "missing-klayout"
+    missing_xschem = tmp_path / "missing-xschem"
+
+    result = run(
+        [
+            sys.executable,
+            UPSTREAM_SCRIPT,
+            "--klayout-source",
+            missing_klayout,
+            "--xschem-source",
+            missing_xschem,
+            "--work-dir",
+            work_dir,
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 1, result.stdout
+    data = json.loads(result.stdout)
+    assert data["profiles"]["klayout"]["error"]["code"] == "source-missing"
+    assert data["profiles"]["xschem"]["error"]["code"] == "source-missing"
 
 
 def test_plan_threads_custom_env_name_into_upstream_and_container_commands(tmp_path):
@@ -1082,6 +1109,76 @@ def test_plan_decisions_can_emit_isolated_upstream_installed_command(tmp_path):
     assert data["container"]["live_install_smoke_upstream_command"] == upstream
 
 
+def test_container_upstream_command_quotes_paths_with_spaces(tmp_path):
+    workspace = tmp_path / "workspace with spaces"
+    output_dir = tmp_path / "channel with spaces"
+    session_dir = tmp_path / "session with spaces"
+    image = tmp_path / "monata env python.sif"
+    host_pixi_root = tmp_path / "host pixi"
+    klayout_source = tmp_path / "klayout source"
+    xschem_source = tmp_path / "xschem source"
+    write_monata_workspace(workspace)
+    write_channel_artifacts(output_dir, ["ngspice", "openvaf-r", "klayout", "xschem"])
+    image.write_text("sif", encoding="utf-8")
+    (host_pixi_root / "bin").mkdir(parents=True)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            "--container-image",
+            image,
+            "--host-pixi-root",
+            host_pixi_root,
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--local-source",
+            f"xschem={xschem_source}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    command = data["container"]["live_install_smoke_upstream_command"]
+    argv = shlex.split(command)
+    assert argv[argv.index("--state-dir") + 1] == str(session_dir.resolve() / "container-state")
+    assert argv[argv.index("--workspace") + 1] == str(workspace.resolve())
+    assert argv[argv.index("--channel") + 1] == str(output_dir.resolve())
+    assert argv[argv.index("--image") + 1] == str(image.resolve())
+    binds = [argv[index + 1] for index, token in enumerate(argv) if token == "--bind"]
+    assert f"{host_pixi_root.resolve() / 'bin' / 'pixi'}:/opt/host-pixi/bin/pixi:ro" in binds
+    assert f"{klayout_source.resolve()}:/mnt/sources/klayout:ro" in binds
+    assert f"{xschem_source.resolve()}:/mnt/sources/xschem:ro" in binds
+    payload = argv[argv.index("--") + 1 :]
+    assert payload[:2] == ["bash", "-c"]
+    assert "--local-source klayout=/mnt/sources/klayout" in payload[2]
+    assert "--local-source xschem=/mnt/sources/xschem" in payload[2]
+    assert "--upstream-profile basic" in payload[2]
+
+
+def test_historical_monata_sim_env_docs_are_marked_superseded():
+    docs = [
+        REPO_ROOT / "docs" / "superpowers" / "specs" / "2026-06-19-monata-env-design.md",
+        REPO_ROOT / "docs" / "superpowers" / "plans" / "2026-06-19-monata-env.md",
+    ]
+    for path in docs:
+        text = path.read_text(encoding="utf-8")
+        assert "monata-sim-env" in text
+        assert "Historical note" in text
+        assert "plugins/monata-env/skills/monata-env/SKILL.md" in text
+        assert "active install runbook" in text
+
+
 def test_plan_decisions_recommend_local_sources_and_basic_upstream_profile(tmp_path):
     workspace = tmp_path / "workspace"
     output_dir = tmp_path / "channel"
@@ -1199,6 +1296,67 @@ def test_upstream_script_returns_structured_missing_source_status(tmp_path):
     assert data["profiles"]["klayout"]["ok"] is False
     assert data["profiles"]["klayout"]["reason"] == "source-missing"
     assert data["profiles"]["klayout"]["source"] == str(missing.resolve())
+
+
+def test_upstream_script_runs_klayout_testdata_and_stream_wrapper(tmp_path):
+    source = tmp_path / "klayout"
+    test_dir = source / "testdata" / "klayout_main"
+    env_prefix = tmp_path / "monata-env"
+    work_dir = tmp_path / "work"
+    test_dir.mkdir(parents=True)
+    (env_prefix / "bin").mkdir(parents=True)
+    (test_dir / "test12.py").write_text("print('upstream klayout test')\n", encoding="utf-8")
+    klayout = env_prefix / "bin" / "klayout"
+    write_executable(
+        klayout,
+        f"#!{sys.executable}\n"
+        "import re, sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "script = Path(args[args.index('-r') + 1])\n"
+        "text = script.read_text()\n"
+        "match = re.search(r\"layout\\.write\\(['\\\"]([^'\\\"]+)\", text)\n"
+        "if match:\n"
+        "    Path(match.group(1)).write_bytes(b'gds')\n"
+        "    print('wrote ' + match.group(1))\n"
+        "else:\n"
+        "    print('ran upstream testdata')\n",
+    )
+    strm2txt = env_prefix / "bin" / "strm2txt"
+    write_executable(
+        strm2txt,
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "Path(sys.argv[2]).write_text('begin_lib\\nend_lib\\n', encoding='utf-8')\n",
+    )
+
+    result = run(
+        [
+            sys.executable,
+            UPSTREAM_SCRIPT,
+            "--format",
+            "json",
+            "--klayout-source",
+            source,
+            "--env-prefix",
+            env_prefix,
+            "--work-dir",
+            work_dir,
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    checks = data["profiles"]["klayout"]["checks"]
+    assert [check["id"] for check in checks] == [
+        "klayout-main-test12",
+        "klayout-gds-generate-for-strm2txt",
+        "klayout-strm2txt-wrapper",
+    ]
+    assert checks[0]["command"][0] == str(klayout.resolve())
+    assert checks[2]["command"][0] == str(strm2txt.resolve())
+    assert checks[2]["output_size"] > 0
 
 
 def test_upstream_script_uses_env_prefix_tclsh_for_full_xschem_profile(tmp_path):
@@ -1743,6 +1901,41 @@ def test_execute_runbook_suggests_local_sources_after_network_failure(tmp_path):
     assert summary["next_actions"][0]["id"] == "provide-local-source"
 
 
+def test_execute_runbook_uses_structured_source_download_error(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "build",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            (
+                                "import json, sys; "
+                                "print(json.dumps({'ok': False, 'error': {'code': 'source-download-failed'}})); "
+                                "sys.exit(1)"
+                            ),
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    assert summary["steps"][0]["next_actions"][0]["id"] == "provide-local-source"
+    assert summary["steps"][0]["next_actions"][0]["evidence"]["error_code"] == "source-download-failed"
+
+
 def test_network_failure_recovery_replans_with_user_provided_local_sources(tmp_path):
     plan_path = tmp_path / "plan.json"
     workspace = tmp_path / "workspace"
@@ -1916,6 +2109,41 @@ def test_execute_runbook_suggests_helper_resolution_when_helper_script_is_missin
     assert summary["next_actions"][0]["id"] == "resolve-conda-build-helper"
 
 
+def test_execute_runbook_uses_structured_helper_missing_error(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "check_channel",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            (
+                                "import json, sys; "
+                                "print(json.dumps({'ok': False, 'error': {'code': 'conda-build-helper-missing'}})); "
+                                "sys.exit(1)"
+                            ),
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    assert summary["steps"][0]["next_actions"][0]["id"] == "resolve-conda-build-helper"
+    assert summary["steps"][0]["next_actions"][0]["evidence"]["error_code"] == "conda-build-helper-missing"
+
+
 def test_execute_runbook_suggests_worktree_for_source_ref_mismatch(tmp_path):
     plan_path = tmp_path / "plan.json"
     workspace = tmp_path / "workspace"
@@ -1998,6 +2226,49 @@ def test_execute_runbook_suggests_worktree_for_source_ref_mismatch(tmp_path):
     build_command = " ".join(data["commands"]["build"])
     assert "--local-source klayout=" in build_command
     assert "--local-source-ref klayout=v0.30.9" in build_command
+
+
+def test_execute_runbook_uses_structured_source_ref_mismatch_error(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    klayout_source = tmp_path / "klayout"
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    plan_path.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "build",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            (
+                                "import json, sys; "
+                                "print(json.dumps({'ok': False, 'error': {'code': 'local-source-ref-mismatch'}})); "
+                                "sys.exit(1)"
+                            ),
+                            "--local-source",
+                            f"klayout={klayout_source.resolve()}",
+                            "--local-source-ref",
+                            "klayout=v0.30.9",
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run([sys.executable, EXECUTE_SCRIPT, "--plan", plan_path, "--format", "json"])
+
+    assert result.returncode == 1, result.stdout
+    summary = json.loads(result.stdout)
+    action = summary["steps"][0]["next_actions"][0]
+    assert action["id"] == "create-versioned-source-worktree"
+    assert action["evidence"]["error_code"] == "local-source-ref-mismatch"
+    assert action["decision"]["options"][0]["worktree_commands"]["klayout"][-1] == "v0.30.9"
 
 
 def test_execute_runbook_suggests_tool_inspection_for_smoke_failure(tmp_path):
@@ -2594,6 +2865,7 @@ def test_rattler_local_source_ref_rejects_mismatched_checkout(tmp_path):
 
     assert result.returncode != 0
     assert "does not match required ref" in result.stdout
+    assert '"code": "local-source-ref-mismatch"' in result.stdout
 
 
 def test_rattler_local_source_archive_dry_run_uses_extracted_source_path(tmp_path):

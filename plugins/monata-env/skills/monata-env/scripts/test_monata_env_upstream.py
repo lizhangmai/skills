@@ -54,6 +54,7 @@ def failure(reason, source=None):
     item = {
         "ok": False,
         "reason": reason,
+        "error": {"code": reason},
         "checks": [],
     }
     if source is not None:
@@ -138,14 +139,54 @@ def run_klayout_upstream(source, work_dir, env_name, env_prefix, timeout):
     script = source / "testdata" / "klayout_main" / "test12.py"
     if not script.exists():
         return failure("source-test-missing", source)
-    checks.append(run([klayout, "-b", "-r", script], cwd=work_dir, timeout=timeout))
+    check = run([klayout, "-b", "-r", script], cwd=work_dir, timeout=timeout)
+    check["id"] = "klayout-main-test12"
+    checks.append(check)
 
     # If the pixi global environment Python can be located, also run a small
     # upstream Python-binding test that reads upstream GDS/GDS2 text fixtures.
     python = env_python(env_name, env_prefix)
     import_db = source / "testdata" / "pymod" / "import_db.py"
     if python and import_db.exists():
-        checks.append(run([python, import_db], cwd=work_dir, timeout=timeout))
+        check = run([python, import_db], cwd=work_dir, timeout=timeout)
+        check["id"] = "klayout-python-import-db"
+        checks.append(check)
+
+    strm2txt = env_executable("strm2txt", env_name=env_name, env_prefix=env_prefix)
+    gds_output = work_dir / "klayout-strm2txt-wrapper.gds"
+    txt_output = work_dir / "klayout-strm2txt-wrapper.txt"
+    if strm2txt:
+        wrapper_script = work_dir / "klayout-strm2txt-wrapper.rb"
+        wrapper_script.write_text(
+            f"""layout = RBA::Layout::new
+cell = layout.create_cell('TOP')
+layer = layout.layer(1, 0)
+cell.shapes(layer).insert(RBA::Box::new(0, 0, 1000, 1000))
+layout.write('{gds_output}')
+puts 'wrote {gds_output}'
+""",
+            encoding="utf-8",
+        )
+        check = run([klayout, "-b", "-r", wrapper_script], cwd=work_dir, timeout=timeout)
+        check["id"] = "klayout-gds-generate-for-strm2txt"
+        check["output_file"] = str(gds_output)
+        check["output_size"] = gds_output.stat().st_size if gds_output.exists() else 0
+        checks.append(check)
+        check = run([strm2txt, gds_output, txt_output], cwd=work_dir, timeout=timeout)
+        check["id"] = "klayout-strm2txt-wrapper"
+        check["output_file"] = str(txt_output)
+        check["output_size"] = txt_output.stat().st_size if txt_output.exists() else 0
+        checks.append(check)
+    else:
+        checks.append(
+            {
+                "id": "klayout-strm2txt-wrapper",
+                "command": ["strm2txt"],
+                "cwd": str(work_dir),
+                "returncode": 127,
+                "output": "missing strm2txt executable in installed KLayout environment",
+            }
+        )
 
     ok = all(item["returncode"] == 0 for item in checks)
     return {

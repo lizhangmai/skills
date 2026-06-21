@@ -71,6 +71,23 @@ pixi global install --channel https://prefix.dev/conda-forge rattler-build
 rattler-build --version
 ```
 
+When a local conda channel needs classic conda repodata, install both
+`conda-build` and `conda-index` into the same pixi global environment and expose
+only real executables:
+
+```bash
+pixi global add --environment base conda-build conda-index
+pixi global expose add --environment base conda=conda conda-build=conda-build
+conda index <channel-dir>
+```
+
+`conda-index` registers the `conda index` plugin subcommand; it does not
+guarantee a standalone `conda-index` executable. Do not expose
+`conda-index=conda-index` unless `base/bin/conda-index` actually exists from a
+package install. If `conda commands` does not list `index`, check that the
+current shell is using the pixi global `conda` and that `CONDA_NO_PLUGINS` is
+not disabling conda plugins.
+
 Build larger dependency sets only when explicitly requested:
 
 ```bash
@@ -116,8 +133,12 @@ Smoke-test the bundled circuit artifacts after a build:
 
 ```bash
 export CONDA_BUILD_OUTPUT_DIR="<user-provided-absolute-conda-channel>"
-python scripts/test_circuit_artifacts.py
+python scripts/test_circuit_artifacts.py --profile monata-env-baseline
 ```
+
+Use `--profile full-toolchain` only when the channel intentionally includes the
+larger recipe stack, including ADMS, Xyce, Monata, InSpice, XDM, VACASK, and
+Trilinos 17.1.0.
 
 ## Resources
 

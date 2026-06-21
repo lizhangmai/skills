@@ -252,6 +252,7 @@ exec "$@"
     data = json.loads(result.stdout)
     assert data["ok"] is False
     assert data["reason"] == "missing-required-commands"
+    assert data["error"]["code"] == "missing-required-commands"
     assert data["missing"] == ["definitely-missing-monata-tool"]
     assert data["required_commands"] == ["definitely-missing-monata-tool"]
     assert data["next_actions"][0]["id"] == "choose-container-with-required-commands"
@@ -294,6 +295,7 @@ exit 255
     assert result.returncode == 255
     data = json.loads(result.stdout)
     assert data["reason"] == "preflight-command-failed"
+    assert data["error"]["code"] == "registry-download-failed"
     assert data["next_actions"][0]["id"] == "use-local-container-image"
     assert data["next_actions"][0]["requires_user_input"] is True
     assert "local .sif" in data["next_actions"][0]["prompt"]

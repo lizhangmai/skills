@@ -1,5 +1,10 @@
 # Monata Env Implementation Plan
 
+> Historical note: this completed plan records the rename from
+> `monata-sim-env` to `monata-env`. The current implementation and executable
+> guidance live in `plugins/monata-env/skills/monata-env/SKILL.md`; do not use
+> this historical plan as the active install runbook.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Rename `monata-sim-env` to `monata-env` and make it manage only global Monata circuit-tool dependencies through pixi global.

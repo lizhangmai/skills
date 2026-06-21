@@ -146,10 +146,26 @@ Test packages after building:
 
 ```bash
 python scripts/test_circuit_artifacts.py \
-  --output-dir "<user-provided-absolute-conda-channel>"
+  --output-dir "<user-provided-absolute-conda-channel>" \
+  --profile monata-env-baseline
 ```
 
-The smoke test installs from `file://<output-dir>` plus the dependency channel, then checks Python imports and minimal simulator/layout-tool runs for `ngspice`, `openvaf-r`, `klayout`, `xschem`, `adms`, `vacask`, `xyce`, `xdm`, `monata`, and `inspice`.
+The default `monata-env-baseline` smoke installs from `file://<output-dir>`
+plus the dependency channel, then checks minimal simulator/layout-tool runs for
+`ngspice`, `openvaf-r`, `klayout`, and `xschem`.
+
+Use the complete profile only when the channel intentionally contains the
+larger recipe stack:
+
+```bash
+python scripts/test_circuit_artifacts.py \
+  --output-dir "<user-provided-absolute-conda-channel>" \
+  --profile full-toolchain
+```
+
+The `full-toolchain` smoke additionally checks Python imports and minimal runs
+for `adms`, `vacask`, `xyce`, `xdm`, `monata`, `inspice`, and the separate
+Trilinos 17.1.0 environment.
 
 ## Package Order
 

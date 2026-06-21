@@ -218,6 +218,18 @@ def payload_next_actions(item):
     ]
 
 
+def payload_error_code(item):
+    payload = output_json_payload(item)
+    if not payload:
+        return ""
+    error = payload.get("error")
+    if isinstance(error, dict) and error.get("code"):
+        return str(error["code"])
+    if isinstance(payload.get("error_code"), str):
+        return payload["error_code"]
+    return ""
+
+
 def upstream_rerun_command(step, timeout):
     command = [str(part) for part in step.get("original_command") or step.get("command") or []]
     if not command:
@@ -308,6 +320,9 @@ def next_actions_for_failure(step, item):
         "stdout_path": item.get("stdout_path", ""),
         "stderr_path": item.get("stderr_path", ""),
     }
+    error_code = payload_error_code(item)
+    if error_code:
+        evidence["error_code"] = error_code
     actions = payload_next_actions(item)
     if step_id == "upstream_installed_tests" and "xschem-full-regression" in text and "timed out after" in text:
         rerun_command = upstream_rerun_command(step, 900)
@@ -338,17 +353,27 @@ def next_actions_for_failure(step, item):
                 "prompt": "The runbook step timed out. Inspect the step log, then either retry with a larger timeout, provide a local package/source/cache fallback, or run a narrower step before continuing.",
             }
         )
-    if "rattler_channel.py" in text or "no such file" in text or "can't open file" in text:
+    if (
+        error_code in {"conda-build-helper-missing", "helper-missing"}
+        or "rattler_channel.py" in text
+        or "no such file" in text
+        or "can't open file" in text
+    ):
         actions.append(
             {
                 "id": "resolve-conda-build-helper",
                 "title": "Resolve the conda-build helper path",
                 "requires_user_input": False,
+                "evidence": evidence,
                 "command": "python scripts/plan_monata_env.py --conda-build-helper <path-to-rattler_channel.py> ...",
                 "prompt": "The conda-build helper script is missing. Re-run the planner with a valid --conda-build-helper path or refresh the helper checkout.",
             }
         )
-    if "does not match required ref" in text or "target-ref-missing" in text:
+    if (
+        error_code in {"local-source-ref-mismatch", "local-source-target-ref-missing"}
+        or "does not match required ref" in text
+        or "target-ref-missing" in text
+    ):
         repair_context = source_ref_repair_context(step)
         packages = list(repair_context) or ["klayout", "xschem"]
         worktree_sources = {
@@ -405,7 +430,10 @@ def next_actions_for_failure(step, item):
                 "prompt": "The provided source checkout is not at the required upstream ref. Ask whether to create a detached worktree at the required tag or provide a corrected local source path.",
             }
         )
-    if any(token in text for token in ("network timeout", "failed to download", "could not resolve host", "connection timed out")):
+    if (
+        error_code in {"source-download-failed", "network-download-failed", "registry-download-failed"}
+        or any(token in text for token in ("network timeout", "failed to download", "could not resolve host", "connection timed out"))
+    ):
         actions.append(
             {
                 "id": "provide-local-source",

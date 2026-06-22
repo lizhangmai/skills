@@ -1,0 +1,20 @@
+{
+  "packages": {
+    "klayout": {
+      "version": "0.30.9",
+      "source_ref": "v0.30.9",
+      "source_commit": "6270877110ef808dd442fd2244164cec06a7b10e",
+      "planner_package_spec": "klayout=0.30.9",
+      "recipe_sha256": "cda63ae729ac6e1bba92d1003e1af12093db5bb7c45dca241337ca27dc68bedf",
+      "upstream": "https://github.com/KLayout/klayout/tree/v0.30.9"
+    },
+    "xschem": {
+      "version": "3.4.7",
+      "source_ref": "3.4.7",
+      "source_commit": "92dd8fe5f4d5c1057489710d8a22f18fdc9d7ed0",
+      "planner_package_spec": "xschem=3.4.7",
+      "recipe_sha256": "2d292390a9144082a79b862c2ef39bc67164868f466ad5dfbc9367f498fede16",
+      "upstream": "https://codeberg.org/stef_xschem/xschem/src/tag/3.4.7"
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "monata-env install manifest",
+  "type": "object",
+  "required": ["schema_version", "plan", "execution", "verification"],
+  "properties": {
+    "schema_version": {
+      "type": "integer"
+    },
+    "plan": {
+      "type": "object"
+    },
+    "execution": {
+      "type": "object",
+      "required": ["commands_run", "artifacts"],
+      "properties": {
+        "commands_run": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "command", "returncode"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1
+              },
+              "command": {
+                "type": "string",
+                "minLength": 1
+              },
+              "returncode": {
+                "type": "integer"
+              },
+              "stdout_file": {
+                "type": "string"
+              },
+              "stderr_file": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["package", "path", "filename", "size"],
+            "properties": {
+              "package": {
+                "type": "string",
+                "minLength": 1
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "filename": {
+                "type": "string",
+                "minLength": 1
+              },
+              "size": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "verification": {
+      "type": "object",
+      "required": ["smoke", "upstream_installed", "audit"],
+      "properties": {
+        "smoke": {
+          "type": ["object", "null"]
+        },
+        "upstream_installed": {
+          "type": ["object", "null"]
+        },
+        "audit": {
+          "type": ["object", "null"]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

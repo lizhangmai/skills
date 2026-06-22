@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "monata-env runbook execution summary",
+  "type": "object",
+  "required": ["ok", "steps", "next_actions"],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["skipped", "dry-run", "executed"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "returncode": {
+            "type": "integer"
+          },
+          "record_returncode": {
+            "type": ["integer", "null"]
+          },
+          "next_actions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": true
+}

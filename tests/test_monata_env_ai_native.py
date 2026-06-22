@@ -16,6 +16,9 @@ UPSTREAM_SCRIPT = (
 EXECUTE_SCRIPT = (
     REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "execute_monata_env_runbook.py"
 )
+REPLAY_SCRIPT = (
+    REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "replay_monata_env_negotiation.py"
+)
 PREPARE_IMAGE_SCRIPT = (
     REPO_ROOT / "plugins" / "monata-env" / "skills" / "monata-env" / "scripts" / "prepare_monata_env_test_image.py"
 )
@@ -2004,6 +2007,116 @@ def test_network_failure_recovery_replans_with_user_provided_local_sources(tmp_p
     upstream_command = " ".join(data["commands"]["upstream_installed_tests"])
     assert f"--klayout-source {klayout_source.resolve()}" in upstream_command
     assert f"--xschem-source {xschem_source.resolve()}" in upstream_command
+
+
+def test_network_failure_negotiation_replay_generates_replan_args_and_continues_runbook(tmp_path):
+    failed_plan = tmp_path / "failed-plan.json"
+    failed_summary = tmp_path / "failed-summary.json"
+    recovered_plan = tmp_path / "recovered-plan.json"
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+    failed_plan.write_text(
+        json.dumps(
+            {
+                "runbook": [
+                    {
+                        "id": "build",
+                        "recommended": True,
+                        "requires_confirmation": False,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            (
+                                "import json, sys; "
+                                "print(json.dumps({'ok': False, 'error': {'code': 'source-download-failed'}})); "
+                                "sys.exit(1)"
+                            ),
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    failure = run([sys.executable, EXECUTE_SCRIPT, "--plan", failed_plan, "--format", "json"])
+    assert failure.returncode == 1, failure.stdout
+    failed_summary.write_text(failure.stdout, encoding="utf-8")
+    replay = run(
+        [
+            sys.executable,
+            REPLAY_SCRIPT,
+            "--summary",
+            failed_summary,
+            "--action",
+            "provide-local-source",
+            "--option",
+            "provide_local_source",
+            "--replace",
+            f"<klayout-source>={klayout_source.resolve()}",
+            "--replace",
+            f"<xschem-source>={xschem_source.resolve()}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert replay.returncode == 0, replay.stdout
+    replay_data = json.loads(replay.stdout)
+    assert replay_data["action_id"] == "provide-local-source"
+    assert replay_data["option_id"] == "provide_local_source"
+    replan_args = replay_data["replan_arguments"]
+    assert "<klayout-source>" not in replan_args
+    assert f"klayout={klayout_source.resolve()}" in replan_args
+
+    recovered = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            *replan_args,
+            "--format",
+            "json",
+        ]
+    )
+    assert recovered.returncode == 0, recovered.stdout
+    recovered_plan.write_text(recovered.stdout, encoding="utf-8")
+
+    dry_run = run(
+        [
+            sys.executable,
+            EXECUTE_SCRIPT,
+            "--plan",
+            recovered_plan,
+            "--dry-run",
+            "--include-optional",
+            "--allow-confirmation-required",
+            "--step",
+            "build",
+            "--step",
+            "upstream_installed_tests",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert dry_run.returncode == 0, dry_run.stdout
+    dry_data = json.loads(dry_run.stdout)
+    steps = {step["id"]: step for step in dry_data["steps"]}
+    assert steps["build"]["status"] == "dry-run"
+    assert steps["upstream_installed_tests"]["status"] == "dry-run"
 
 
 def test_network_failure_recovery_replans_with_user_provided_source_archives(tmp_path):

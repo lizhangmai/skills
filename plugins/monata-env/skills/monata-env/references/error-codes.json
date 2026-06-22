@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "codes": {
+    "conda-build-helper-missing": {
+      "description": "The conda-build helper script could not be opened or executed.",
+      "producer": "execute_monata_env_runbook.py or helper command output",
+      "recovery": "Re-run the planner with a valid --conda-build-helper path or refresh the helper checkout."
+    },
+    "helper-missing": {
+      "description": "A generic setup helper required by the runbook is unavailable.",
+      "producer": "execute_monata_env_runbook.py or helper command output",
+      "recovery": "Resolve the missing helper path before retrying the affected runbook step."
+    },
+    "local-source-missing-for-ref": {
+      "description": "--local-source-ref was provided without a matching --local-source package.",
+      "producer": "rattler_channel.py",
+      "recovery": "Provide the matching local source path or remove the unmatched local source ref."
+    },
+    "local-source-ref-mismatch": {
+      "description": "A provided local git checkout HEAD does not match the recipe-required upstream ref.",
+      "producer": "rattler_channel.py",
+      "recovery": "Create a detached worktree at the required ref, provide a corrected checkout, or provide a trusted source archive."
+    },
+    "local-source-target-ref-missing": {
+      "description": "A provided local git checkout does not contain the recipe-required upstream ref.",
+      "producer": "rattler_channel.py",
+      "recovery": "Fetch tags/refs for the checkout or provide a source checkout/archive that contains the required version."
+    },
+    "missing-required-commands": {
+      "description": "The selected isolated container starts but does not include commands required for the requested live check.",
+      "producer": "skill_container.py",
+      "recovery": "Use or build a container image that contains the required command set."
+    },
+    "network-download-failed": {
+      "description": "A network download failed while fetching a package, source, registry, or dependency artifact.",
+      "producer": "execute_monata_env_runbook.py or command output",
+      "recovery": "Provide a local source checkout/archive, use a reachable mirror, or retry with available network access."
+    },
+    "registry-download-failed": {
+      "description": "The container image registry could not be resolved or downloaded.",
+      "producer": "skill_container.py",
+      "recovery": "Provide a local Singularity .sif image path, use a reachable mirror, or reuse a populated isolated cache."
+    },
+    "source-download-failed": {
+      "description": "The upstream source download failed while building circuit-tool packages.",
+      "producer": "execute_monata_env_runbook.py or command output",
+      "recovery": "Ask the user for local KLayout/Xschem source checkouts or trusted source archives, then re-plan with --local-source."
+    },
+    "source-missing": {
+      "description": "A requested upstream source checkout path does not exist.",
+      "producer": "test_monata_env_upstream.py",
+      "recovery": "Ask the user for a corrected local checkout path or skip upstream-installed tests."
+    },
+    "source-test-missing": {
+      "description": "The local upstream source exists but does not contain the expected test assets.",
+      "producer": "test_monata_env_upstream.py",
+      "recovery": "Use a complete upstream checkout at the expected project version."
+    },
+    "tclsh-missing": {
+      "description": "The full Xschem upstream regression profile requires tclsh, but no tclsh executable was found.",
+      "producer": "test_monata_env_upstream.py",
+      "recovery": "Install or expose Tcl in the environment, or re-plan with --upstream-profile basic."
+    },
+    "tool-missing": {
+      "description": "An installed-tool upstream test could not find the required tool executable.",
+      "producer": "test_monata_env_upstream.py",
+      "recovery": "Install or repair the missing tool exposure in the pixi global monata-env environment."
+    }
+  }
+}

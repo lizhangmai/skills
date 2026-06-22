@@ -187,10 +187,11 @@ python scripts/render_skill_feedback.py
 ```
 
 The harness installs skills into temporary agent homes, uses fixtures under
-`tests/fixtures/`, writes ignored reports under `reports/`, and checks
-guardrails such as missing output directories, no silent global tool installs,
-minimal Monata circuit/layout-tool builds, pixi global isolation, and techlib
-redistribution boundaries.
+`tests/fixtures/`, writes ignored reports under `reports/`, clears stale JSON
+reports in the selected output directory unless `--keep-existing-reports` is
+set, and checks guardrails such as missing output directories, no silent global
+tool installs, minimal Monata circuit/layout-tool builds, pixi global
+isolation, and techlib redistribution boundaries.
 
 For live checks that might touch pixi, package caches, or local channels, run
 the command through the Singularity wrapper first with `--dry-run`:

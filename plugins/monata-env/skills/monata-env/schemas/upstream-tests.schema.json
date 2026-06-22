@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "monata-env upstream-installed test report",
+  "type": "object",
+  "required": ["ok", "profile", "profiles", "work_dir"],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "profile": {
+      "type": "string",
+      "enum": ["basic", "full"]
+    },
+    "profiles": {
+      "type": "object"
+    },
+    "work_dir": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

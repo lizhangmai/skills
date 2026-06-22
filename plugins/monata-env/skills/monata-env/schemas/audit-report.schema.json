@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "monata-env audit report",
+  "type": "object",
+  "required": ["ok", "status", "manifest", "summary", "evidence", "requirements", "recommendations", "next_actions"],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "manifest": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object"
+    },
+    "evidence": {
+      "type": "object"
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "ok"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "recommendations": {
+      "type": "array"
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": true
+}

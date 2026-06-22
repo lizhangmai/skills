@@ -31,6 +31,18 @@ class HarnessFailure(Exception):
     pass
 
 
+def prepare_reports_dir(reports_dir: Path, keep_existing: bool = False) -> List[Path]:
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    if keep_existing:
+        return []
+    removed = []
+    for path in sorted(reports_dir.glob("*.json")):
+        if path.is_file():
+            path.unlink()
+            removed.append(path)
+    return removed
+
+
 def load_case(path: Path) -> Dict:
     text = path.read_text(encoding="utf-8")
     if path.suffix in {".yaml", ".yml"}:
@@ -406,6 +418,11 @@ def parse_args() -> argparse.Namespace:
     run_parser.add_argument("cases", nargs="*", help="Case names or case file paths. Defaults to all cases.")
     run_parser.add_argument("--provider", default="", help="Override provider for every case.")
     run_parser.add_argument("--reports-dir", type=Path, default=DEFAULT_REPORTS_DIR)
+    run_parser.add_argument(
+        "--keep-existing-reports",
+        action="store_true",
+        help="Do not remove existing JSON reports before running selected cases.",
+    )
     run_parser.add_argument("--keep-temp", action="store_true", help="Keep temporary roots for debugging.")
     return parser.parse_args()
 
@@ -440,6 +457,7 @@ def main() -> int:
 
     try:
         case_paths = resolve_selected_cases(args.cases)
+        prepare_reports_dir(args.reports_dir, keep_existing=args.keep_existing_reports)
         ok = True
         for path in case_paths:
             ok = run_case(path, args.provider, args.reports_dir, args.keep_temp) and ok

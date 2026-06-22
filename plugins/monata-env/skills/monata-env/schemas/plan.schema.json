@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "monata-env setup plan",
+  "type": "object",
+  "required": [
+    "mode",
+    "root",
+    "env_name",
+    "packages",
+    "commands",
+    "runbook",
+    "manifest",
+    "questions",
+    "decisions",
+    "container",
+    "test_profiles"
+  ],
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["ai-native-session"]
+    },
+    "root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "env_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "commands": {
+      "type": "object"
+    },
+    "runbook": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "command", "recommended", "requires_confirmation"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recommended": {
+            "type": "boolean"
+          },
+          "requires_confirmation": {
+            "type": "boolean"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "record_after": {
+            "type": ["object", "null"]
+          },
+          "timeout_seconds": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["path", "purpose"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "questions": {
+      "type": "array"
+    },
+    "decisions": {
+      "type": "array"
+    },
+    "container": {
+      "type": "object",
+      "required": ["image", "state_dir", "test_image"],
+      "additionalProperties": true
+    },
+    "test_profiles": {
+      "type": "object",
+      "required": ["upstream_installed"],
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

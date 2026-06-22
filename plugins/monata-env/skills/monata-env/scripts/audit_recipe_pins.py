@@ -1,8 +1,7 @@
 #!/usr/bin/env python
-"""Audit monata-env planner pins against circuit-toolchain recipes."""
+"""Audit monata-env circuit-tool pins against circuit-toolchain recipes."""
 
 import argparse
-import importlib.util
 import json
 import re
 import sys
@@ -12,7 +11,6 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_ROOT = SCRIPT_DIR.parent
 DEFAULT_PINS_FILE = SKILL_ROOT / "references" / "circuit-tool-pins.json"
-DEFAULT_PLANNER_SCRIPT = SCRIPT_DIR / "plan_monata_env.py"
 DEFAULT_RECIPE_ROOT = (
     SCRIPT_DIR.parents[3]
     / "conda-build"
@@ -24,8 +22,6 @@ DEFAULT_RECIPE_ROOT = (
     / "recipes"
 )
 CHECKS = [
-    "planner-source-ref",
-    "planner-package-spec",
     "recipe-version",
     "recipe-source-commit",
     "recipe-sha256",
@@ -36,7 +32,6 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pins-file", type=Path, default=DEFAULT_PINS_FILE)
-    parser.add_argument("--planner-script", type=Path, default=DEFAULT_PLANNER_SCRIPT)
     parser.add_argument("--recipe-root", type=Path, default=DEFAULT_RECIPE_ROOT)
     parser.add_argument("--format", choices=["summary", "json"], default="summary")
     return parser.parse_args(argv)
@@ -45,23 +40,6 @@ def parse_args(argv=None):
 def load_json(path):
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
-
-
-def load_planner_constants(path):
-    sys.path.insert(0, str(path.parent))
-    try:
-        spec = importlib.util.spec_from_file_location("monata_env_plan_for_pin_audit", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return {
-            "expected_source_refs": dict(module.EXPECTED_SOURCE_REFS),
-            "pixi_package_specs": dict(module.PIXI_PACKAGE_SPECS),
-        }
-    finally:
-        try:
-            sys.path.remove(str(path.parent))
-        except ValueError:
-            pass
 
 
 def clean_scalar(value):
@@ -108,12 +86,11 @@ def add_error(errors, package, check, expected, actual, path=None):
     errors.append(error)
 
 
-def package_record(package, pin, planner, recipe):
+def package_record(package, pin, recipe):
     return {
         "version": pin["version"],
         "source_ref": pin["source_ref"],
         "source_commit": pin["source_commit"],
-        "planner_package_spec": planner["pixi_package_specs"].get(package),
         "recipe_version": recipe.get("version"),
         "recipe_source_url": recipe.get("source_url"),
         "recipe_sha256": recipe.get("sha256"),
@@ -123,25 +100,15 @@ def package_record(package, pin, planner, recipe):
 
 def audit(args):
     pins_file = args.pins_file.expanduser().resolve()
-    planner_script = args.planner_script.expanduser().resolve()
     recipe_root = args.recipe_root.expanduser().resolve()
     pins = load_json(pins_file)
-    planner = load_planner_constants(planner_script)
     errors = []
     packages = {}
 
     for package, pin in sorted(pins["packages"].items()):
         recipe_path = recipe_root / package / "recipe.yaml"
         recipe = parse_recipe(recipe_path) if recipe_path.exists() else {}
-        packages[package] = package_record(package, pin, planner, recipe)
-
-        actual_ref = planner["expected_source_refs"].get(package)
-        if actual_ref != pin["source_ref"]:
-            add_error(errors, package, "planner-source-ref", pin["source_ref"], actual_ref, planner_script)
-
-        actual_spec = planner["pixi_package_specs"].get(package)
-        if actual_spec != pin["planner_package_spec"]:
-            add_error(errors, package, "planner-package-spec", pin["planner_package_spec"], actual_spec, planner_script)
+        packages[package] = package_record(package, pin, recipe)
 
         if recipe.get("version") != pin["version"]:
             add_error(errors, package, "recipe-version", pin["version"], recipe.get("version"), recipe_path)
@@ -158,7 +125,6 @@ def audit(args):
     return {
         "ok": not errors,
         "pins_file": str(pins_file),
-        "planner_script": str(planner_script),
         "recipe_root": str(recipe_root),
         "packages": packages,
         "errors": errors,

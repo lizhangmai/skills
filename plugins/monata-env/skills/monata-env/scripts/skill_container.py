@@ -136,6 +136,16 @@ def decoded_output(value):
     return str(value)
 
 
+def positive_timeout_seconds(value):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError("--timeout-seconds must be a positive integer")
+    if number <= 0:
+        raise argparse.ArgumentTypeError("--timeout-seconds must be a positive integer")
+    return number
+
+
 def container_timeout_payload(args, dirs, command, exc):
     timeout_seconds = args.timeout_seconds
     return {
@@ -290,7 +300,7 @@ def parse_args():
     parser.add_argument("--dry-run", action="store_true", help="Print the container command as JSON without executing it.")
     parser.add_argument(
         "--timeout-seconds",
-        type=int,
+        type=positive_timeout_seconds,
         help="Maximum seconds for the live container command after preflight. Emits structured JSON and exits 124 on timeout.",
     )
     parser.add_argument(

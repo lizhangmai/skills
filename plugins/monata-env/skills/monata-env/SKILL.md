@@ -269,6 +269,12 @@ after the user approves a live container build; it runs `check_channel`,
 `build`, `install`, `smoke`, `upstream_installed_tests`, and `audit` inside
 the isolated state.
 
+For a maintained manual entry point, use
+`scripts/run_live_build_validation.py --dry-run` first. It plans
+`commands.build_install_smoke_upstream`, writes a host manifest seed, reports
+the host/container artifact directories, and can execute the live command after
+approval.
+
 The plan's `container.cache_strategy` and `container.live_timeout_seconds`
 describe where HOME, pixi, rattler, Singularity cache/tmp, and the outer
 wrapper timeout live. Timeout failures return `container-command-timeout`; use

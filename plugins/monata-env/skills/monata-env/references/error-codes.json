@@ -26,6 +26,11 @@
       "producer": "rattler_channel.py",
       "recovery": "Create a detached worktree at the required ref, provide a corrected checkout, or provide a trusted source archive."
     },
+    "local-source-submodule-missing": {
+      "description": "A provided local git checkout has one or more uninitialized submodules.",
+      "producer": "plan_monata_env.py or rattler_channel.py",
+      "recovery": "Initialize the missing submodules recursively, provide a complete checkout, or provide a trusted source archive."
+    },
     "local-source-target-ref-missing": {
       "description": "A provided local git checkout does not contain the recipe-required upstream ref.",
       "producer": "rattler_channel.py",

@@ -165,6 +165,27 @@ def git_commit(path, ref):
     return result.stdout.strip()
 
 
+def missing_git_submodules(path):
+    result = subprocess.run(
+        ["git", "-C", str(path), "submodule", "status", "--recursive"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+    missing = []
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("-"):
+            continue
+        parts = stripped[1:].split()
+        if len(parts) >= 2:
+            missing.append(parts[1])
+    return missing
+
+
 def is_local_source_archive(path):
     if not path.is_file():
         return False
@@ -234,6 +255,19 @@ def validate_local_source_refs(local_sources, local_source_refs):
                 head=head,
                 target_ref=ref,
                 target_commit=target,
+            )
+            raise SystemExit(message)
+        missing_submodules = missing_git_submodules(source_path)
+        if missing_submodules:
+            message = "Local source for {} has uninitialized submodule(s): {}".format(
+                package, ", ".join(missing_submodules)
+            )
+            emit_structured_error(
+                "local-source-submodule-missing",
+                message,
+                package=package,
+                source=str(source_path),
+                missing_submodules=missing_submodules,
             )
             raise SystemExit(message)
 

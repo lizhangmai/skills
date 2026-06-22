@@ -353,6 +353,37 @@ def next_actions_for_failure(step, item):
                 "prompt": "The runbook step timed out. Inspect the step log, then either retry with a larger timeout, provide a local package/source/cache fallback, or run a narrower step before continuing.",
             }
         )
+    lower_text = text.lower()
+    if "permission denied" in lower_text:
+        actions.append(
+            {
+                "id": "repair-output-directory-permissions",
+                "title": "Repair output directory permissions",
+                "requires_user_input": True,
+                "evidence": evidence,
+                "prompt": "The runbook step hit a permission error while writing channel, cache, or log output. Inspect ownership and permissions for the selected output/session/state directories, then retry with a writable path.",
+            }
+        )
+    if "no space left on device" in lower_text or "disk full" in lower_text:
+        actions.append(
+            {
+                "id": "free-disk-space-or-change-output-dir",
+                "title": "Free disk space or choose another output directory",
+                "requires_user_input": True,
+                "evidence": evidence,
+                "prompt": "The runbook step ran out of disk space. Free space in the output/cache/state filesystem or re-plan with a channel and container state directory on a filesystem with enough capacity.",
+            }
+        )
+    if "cache" in lower_text and any(token in lower_text for token in ("corrupt", "lock", "locked", "stale")):
+        actions.append(
+            {
+                "id": "inspect-rattler-cache-or-lock",
+                "title": "Inspect rattler cache or build lock",
+                "requires_user_input": False,
+                "evidence": evidence,
+                "prompt": "The failure mentions a cache or lock problem. Inspect RATTLER_CACHE_DIR and any concurrent rattler-build processes, then retry with a clean isolated cache or after the stale lock is resolved.",
+            }
+        )
     if (
         error_code in {"conda-build-helper-missing", "helper-missing"}
         or "rattler_channel.py" in text

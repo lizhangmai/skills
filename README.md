@@ -212,6 +212,27 @@ The wrapper binds this repository to `/mnt/skills`, the workspace to
 `SINGULARITY_TMPDIR` under the selected state directory, so pulling or running
 the image does not use the user's default Singularity cache.
 
+For maintainer-triggered end-to-end validation of the real build/install/smoke
+path, use the manual GitHub Actions workflow `Monata Env Live Build` or run:
+
+```bash
+python plugins/monata-env/skills/monata-env/scripts/run_live_build_validation.py \
+  --root tests/fixtures/workspaces/monata-basic \
+  --output-dir /tmp/monata-env-channel \
+  --session-dir /tmp/monata-env-session \
+  --container-state-dir /tmp/monata-env-container-state \
+  --container-image /path/to/monata-env-test.sif \
+  --host-pixi-root /path/to/pixi/root \
+  --local-source klayout=/path/to/klayout-v0.30.9 \
+  --local-source xschem=/path/to/xschem-3.4.7 \
+  --dry-run \
+  --format json
+```
+
+Remove `--dry-run` only after reviewing the generated
+`commands.build_install_smoke_upstream` command and confirming the selected
+runner has the required Singularity, pixi, cache, and build capacity.
+
 ## Publishing Boundary
 
 This repository should contain reusable skills, helper scripts, references, and

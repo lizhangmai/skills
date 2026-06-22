@@ -63,6 +63,12 @@ result into the isolated pixi global environment, runs smoke tests, runs
 upstream-installed tests, and audits the manifest. Prefer this command before
 claiming a recipe/build-flow change is proven end to end.
 
+Use `scripts/run_live_build_validation.py --dry-run` as the maintained local
+entry point for that tier. It writes a host-side manifest seed, prints the
+generated command, and reports the channel, host session, and container session
+artifact paths. The manual `Monata Env Live Build` workflow runs the same
+script and uploads those artifact directories.
+
 Use `--live-timeout-seconds` on the planner to tune the outer container
 timeout. The generated plan records `container.live_timeout_seconds` and
 `container.cache_strategy`; the latter names the isolated HOME, pixi home,

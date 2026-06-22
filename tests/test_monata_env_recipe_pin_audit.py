@@ -50,20 +50,16 @@ def test_recipe_pin_audit_passes_for_current_circuit_toolchain():
     assert klayout["version"] == "0.30.9"
     assert klayout["source_ref"] == "v0.30.9"
     assert klayout["source_commit"] == "6270877110ef808dd442fd2244164cec06a7b10e"
-    assert klayout["planner_package_spec"] == "klayout=0.30.9"
     assert klayout["recipe_sha256"] == "cda63ae729ac6e1bba92d1003e1af12093db5bb7c45dca241337ca27dc68bedf"
 
     xschem = data["packages"]["xschem"]
     assert xschem["version"] == "3.4.7"
     assert xschem["source_ref"] == "3.4.7"
     assert xschem["source_commit"] == "92dd8fe5f4d5c1057489710d8a22f18fdc9d7ed0"
-    assert xschem["planner_package_spec"] == "xschem=3.4.7"
     assert xschem["recipe_sha256"] == "2d292390a9144082a79b862c2ef39bc67164868f466ad5dfbc9367f498fede16"
 
     for package in data["packages"].values():
         assert package["checks"] == [
-            "planner-source-ref",
-            "planner-package-spec",
             "recipe-version",
             "recipe-source-commit",
             "recipe-sha256",

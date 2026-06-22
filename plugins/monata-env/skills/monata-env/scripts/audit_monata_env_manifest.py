@@ -347,32 +347,57 @@ def command_evidence(manifest):
 def artifact_evidence(manifest):
     artifacts = manifest.get("execution", {}).get("artifacts", [])
     present = []
+    valid = []
+    invalid = []
     seen = set()
+    valid_seen = set()
     for artifact in artifacts:
         package = artifact.get("package")
         if package and package not in seen:
             present.append(package)
             seen.add(package)
+        path = artifact.get("path")
+        reason = ""
+        if not path:
+            reason = "missing-path"
+        else:
+            artifact_path = Path(path)
+            if not artifact_path.exists():
+                reason = "missing-file"
+            elif artifact_path.stat().st_size <= 0:
+                reason = "empty-file"
+        if reason:
+            invalid.append({"package": package, "path": path or "", "reason": reason})
+            continue
+        if package and package not in valid_seen:
+            valid.append(package)
+            valid_seen.add(package)
     missing = [tool for tool in EXPECTED_TOOLS if tool not in seen]
+    valid_missing = [tool for tool in EXPECTED_TOOLS if tool not in valid_seen]
     return {
         "expected_packages": EXPECTED_TOOLS,
         "present_packages": present,
+        "valid_packages": valid,
         "missing_packages": missing,
+        "valid_missing_packages": valid_missing,
+        "invalid_files": invalid,
         "files": artifacts,
     }
 
 
 def package_artifacts_recorded(manifest):
     artifacts = artifact_evidence(manifest)
-    missing = artifacts["missing_packages"]
+    missing = artifacts["valid_missing_packages"]
+    invalid = artifacts["invalid_files"]
     return requirement(
         "package-artifacts-recorded",
         "Package artifacts are recorded for every required tool",
-        not missing,
-        "ok" if not missing else "missing-artifacts",
+        not missing and not invalid,
+        "ok" if not missing and not invalid else "invalid-artifacts" if invalid else "missing-artifacts",
         expected=EXPECTED_TOOLS,
         present=artifacts["present_packages"],
         missing=missing,
+        invalid=invalid,
     )
 
 
@@ -463,6 +488,7 @@ def next_actions(requirements, recommendation, manifest_path=None):
                 "command": command,
                 "evidence": {
                     "missing_packages": artifact_requirement.get("missing", []),
+                    "invalid_artifacts": artifact_requirement.get("invalid", []),
                     "present_packages": artifact_requirement.get("present", []),
                     "manifest": str(manifest_path) if manifest_path else "",
                 },

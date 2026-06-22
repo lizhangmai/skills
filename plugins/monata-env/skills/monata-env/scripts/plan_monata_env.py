@@ -4,40 +4,35 @@
 import argparse
 import hashlib
 import json
-import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+from container_commands import (
+    DEFAULT_CONTAINER_STATE_DIR,
+    command_string,
+    container_cache_strategy,
+    container_install_smoke_command,
+    container_planner_command,
+    default_test_image_output,
+    resolve_container_image,
+    test_image_plan,
+)
 from detect_monata_tools import detect
+from tool_pins import DEFAULT_PINS_FILE, expected_source_refs, exposed_commands, load_tool_pins, pixi_package_specs
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-EXPECTED_SOURCE_REFS = {
-    "klayout": "v0.30.9",
-    "xschem": "3.4.7",
-}
-PIXI_PACKAGE_SPECS = {
-    "ngspice": "ngspice=46.0",
-    "openvaf-r": "openvaf-r",
-    "klayout": "klayout=0.30.9",
-    "xschem": "xschem=3.4.7",
-}
-EXPOSED_COMMANDS = {
-    "ngspice": "ngspice",
-    "openvaf-r": "openvaf-r",
-    "klayout": "klayout",
-    "xschem": "xschem",
-}
+DEFAULT_TOOL_PINS = load_tool_pins(DEFAULT_PINS_FILE)
+EXPECTED_SOURCE_REFS = expected_source_refs(DEFAULT_TOOL_PINS)
+PIXI_PACKAGE_SPECS = pixi_package_specs(DEFAULT_TOOL_PINS)
+EXPOSED_COMMANDS = exposed_commands(DEFAULT_TOOL_PINS)
 CACHED_SKILLS_ROOT = Path.home() / ".cache" / "monata-env" / "skills"
-DEFAULT_CONTAINER_IMAGE = "docker://python:3.12-slim"
-DEFAULT_CONTAINER_STATE_DIR = Path("/tmp/monata-env-skill-test")
 DEFAULT_LIVE_TIMEOUT_SECONDS = {
     "basic": 14400,
     "full": 21600,
 }
-TEST_IMAGE_REQUIRED_COMMANDS = ["/usr/local/bin/python3", "git", "pixi"]
 SOURCE_ARCHIVE_SUFFIXES = (
     ".tar",
     ".tar.gz",
@@ -56,60 +51,20 @@ def recommended_worktree_path(package, target_ref, source_path):
     return f"/tmp/monata-sources/{package}-{safe_ref}-{source_key}"
 
 
-def command_string(command):
-    return shlex.join(str(part) for part in command)
-
-
-def resolve_container_image(value=None):
-    if not value:
-        return DEFAULT_CONTAINER_IMAGE
-    text = str(value)
-    if "://" in text:
-        return text
-    return str(Path(text).expanduser().resolve())
-
-
-def default_test_image_output(session_dir, container_state_dir):
-    if session_dir:
-        return Path(session_dir) / "monata-env-test.sif"
-    return Path(container_state_dir) / "monata-env-test.sif"
-
-
 def live_validation_timeout(upstream_profile, value=None):
     if value is not None:
         return int(value)
     return DEFAULT_LIVE_TIMEOUT_SECONDS[upstream_profile]
 
 
-def container_cache_strategy(state_dir):
-    state = Path(state_dir)
-    return {
-        "state_dir": str(state),
-        "home_dir": str(state / "home"),
-        "pixi_home": str(state / "home" / ".pixi"),
-        "rattler_cache_dir": str(state / "home" / ".cache" / "rattler"),
-        "singularity_cache_dir": str(state / "singularity-cache"),
-        "singularity_tmp_dir": str(state / "singularity-tmp"),
-    }
-
-
-def find_skills_repo_root(helper_script):
-    if not helper_script or not helper_script.exists():
-        return None
-    for candidate in helper_script.resolve().parents:
-        if (
-            candidate.joinpath("plugins", "monata-env", "skills", "monata-env", "scripts", "plan_monata_env.py").exists()
-            and candidate.joinpath(
-                "plugins",
-                "conda-build",
-                "skills",
-                "conda-build",
-                "scripts",
-                "rattler_channel.py",
-            ).exists()
-        ):
-            return candidate
-    return None
+def positive_int(value):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError("--live-timeout-seconds must be a positive integer")
+    if number <= 0:
+        raise argparse.ArgumentTypeError("--live-timeout-seconds must be a positive integer")
+    return number
 
 
 def conda_build_helper_candidates():
@@ -154,6 +109,21 @@ def run_git(path, *args):
     return result.stdout.strip()
 
 
+def missing_git_submodules(path):
+    output = run_git(path, "submodule", "status", "--recursive")
+    if output is None:
+        return []
+    missing = []
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("-"):
+            continue
+        parts = stripped[1:].split()
+        if len(parts) >= 2:
+            missing.append(parts[1])
+    return missing
+
+
 def parse_key_path(values):
     parsed = {}
     for value in values or []:
@@ -174,8 +144,9 @@ def is_source_archive(path):
     return any(name.endswith(suffix) for suffix in SOURCE_ARCHIVE_SUFFIXES)
 
 
-def local_source_status(package, path):
-    target_ref = EXPECTED_SOURCE_REFS.get(package)
+def local_source_status(package, path, expected_refs=None):
+    expected_refs = expected_refs or EXPECTED_SOURCE_REFS
+    target_ref = expected_refs.get(package)
     item = {
         "path": str(path),
         "exists": path.exists(),
@@ -215,7 +186,12 @@ def local_source_status(package, path):
         item["status"] = "target-ref-missing"
         return item
     if head == target:
-        item["status"] = "ok"
+        missing_submodules = missing_git_submodules(path)
+        if missing_submodules:
+            item["status"] = "submodule-missing"
+            item["missing_submodules"] = missing_submodules
+        else:
+            item["status"] = "ok"
     else:
         item["status"] = "ref-mismatch"
         item["recommended_worktree"] = recommended_worktree_path(package, target_ref, path)
@@ -258,7 +234,8 @@ def channel_status(output_dir, packages):
     }
 
 
-def build_command(packages, output_dir, local_sources, helper_script):
+def build_command(packages, output_dir, local_sources, helper_script, expected_refs=None):
+    expected_refs = expected_refs or EXPECTED_SOURCE_REFS
     command = [
         sys.executable,
         str(helper_script),
@@ -270,25 +247,27 @@ def build_command(packages, output_dir, local_sources, helper_script):
         command.extend(["--package", package])
     for package, path in local_sources.items():
         command.extend(["--local-source", f"{package}={path}"])
-        if package in EXPECTED_SOURCE_REFS and not is_source_archive(path):
-            command.extend(["--local-source-ref", f"{package}={EXPECTED_SOURCE_REFS[package]}"])
+        if package in expected_refs and not is_source_archive(path):
+            command.extend(["--local-source-ref", f"{package}={expected_refs[package]}"])
     command.append("--skip-existing")
     if output_dir:
         command.extend(["--output-dir", str(output_dir)])
     return command
 
 
-def install_command(packages, output_dir, env_name):
+def install_command(packages, output_dir, env_name, package_specs=None, exposed=None):
+    package_specs = package_specs or PIXI_PACKAGE_SPECS
+    exposed = exposed or EXPOSED_COMMANDS
     command = ["pixi", "global", "install", "--environment", env_name]
     if output_dir:
         command.extend(["--channel", output_dir.resolve().as_uri()])
     command.extend(["--channel", "conda-forge"])
     for package in packages:
-        executable = EXPOSED_COMMANDS.get(package)
+        executable = exposed.get(package)
         if executable:
             command.extend(["--expose", f"{executable}={executable}"])
     for package in packages:
-        command.append(PIXI_PACKAGE_SPECS.get(package, package))
+        command.append(package_specs.get(package, package))
     return command
 
 
@@ -550,203 +529,6 @@ def runbook(
             ),
         },
     ]
-
-
-def container_runner_argv(root, output_dir, container_image, helper_script, state_dir, extra_options=None):
-    skills_repo_root = find_skills_repo_root(helper_script)
-    command = [
-        "python",
-        "scripts/skill_container.py",
-        "--state-dir",
-        str(state_dir),
-    ]
-    if skills_repo_root:
-        command.extend(["--repo-root", str(skills_repo_root)])
-    command.extend(
-        [
-            "--workspace",
-            str(Path(root).resolve()),
-            "--channel",
-            str(output_dir),
-            "--image",
-            container_image,
-        ]
-    )
-    command.extend(extra_options or [])
-    return command
-
-
-def container_runner_prefix(root, output_dir, container_image, helper_script, state_dir, extra_options=None):
-    return command_string(container_runner_argv(root, output_dir, container_image, helper_script, state_dir, extra_options))
-
-
-def container_planner_command(root, output_dir, container_image, helper_script, state_dir, env_name):
-    skills_repo_root = find_skills_repo_root(helper_script)
-    container_plan_script = "/mnt/skills/scripts/plan_monata_env.py"
-    plan_args = [
-        "python3",
-        container_plan_script,
-        "--root",
-        "/mnt/project",
-        "--output-dir",
-        "/tmp/skill-channel",
-        "--session-dir",
-        "/tmp/skill-home/monata-env-session",
-        "--env-name",
-        env_name,
-    ]
-    if skills_repo_root:
-        container_plan_script = "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py"
-        plan_args[1] = container_plan_script
-        plan_args.extend(
-            [
-                "--conda-build-helper",
-                "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py",
-            ]
-        )
-    plan_args.extend(["--write-manifest", "--format", "json"])
-    inner = "cd /mnt/project && {}".format(command_string(plan_args))
-    command = container_runner_argv(root, output_dir, container_image, helper_script, state_dir)
-    command.extend(["--require-command", "python3", "--dry-run", "--", "bash", "-lc", inner])
-    return command_string(command)
-
-
-def test_image_prepare_command(image_path, host_pixi_root=None, remote=False):
-    command = [
-        sys.executable,
-        str(SCRIPT_DIR / "prepare_monata_env_test_image.py"),
-        "--image",
-        str(image_path),
-        "--format",
-        "json",
-    ]
-    if remote:
-        command.append("--remote")
-    if host_pixi_root:
-        command.extend(["--pixi-binary", str(Path(host_pixi_root) / "bin" / "pixi")])
-    return command_string(command)
-
-
-def test_image_validate_command(root, output_dir, image_path, helper_script, state_dir):
-    command = container_runner_argv(root, output_dir, str(image_path), helper_script, state_dir)
-    for required in TEST_IMAGE_REQUIRED_COMMANDS:
-        command.extend(["--require-command", required])
-    command.extend(["--", "true"])
-    return command_string(command)
-
-
-def test_image_plan(root, output_dir, image_path, helper_script, state_dir, host_pixi_root=None):
-    return {
-        "image": str(image_path),
-        "required_commands": TEST_IMAGE_REQUIRED_COMMANDS,
-        "prepare_command": test_image_prepare_command(image_path, host_pixi_root),
-        "remote_prepare_command": test_image_prepare_command(image_path, remote=True),
-        "validate_command": test_image_validate_command(root, output_dir, image_path, helper_script, state_dir),
-    }
-
-
-def container_install_smoke_command(
-    root,
-    output_dir,
-    container_image,
-    helper_script,
-    host_pixi_root,
-    state_dir,
-    env_name="monata-env",
-    local_source_paths=None,
-    include_build=False,
-    include_upstream=False,
-    upstream_profile="basic",
-    timeout_seconds=None,
-):
-    if not host_pixi_root:
-        return ""
-    container_python = "/usr/local/bin/python3"
-    plan_script = "/mnt/skills/scripts/plan_monata_env.py"
-    execute_script = "/mnt/skills/scripts/execute_monata_env_runbook.py"
-    plan_args = [
-        container_python,
-        plan_script,
-        "--root",
-        "/mnt/project",
-        "--output-dir",
-        "/tmp/skill-channel",
-        "--session-dir",
-        "/tmp/skill-home/monata-env-session",
-        "--env-name",
-        env_name,
-    ]
-    skills_repo_root = find_skills_repo_root(helper_script)
-    if skills_repo_root:
-        plan_script = "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/plan_monata_env.py"
-        execute_script = (
-            "/mnt/skills/plugins/monata-env/skills/monata-env/scripts/"
-            "execute_monata_env_runbook.py"
-        )
-        plan_args[1] = plan_script
-        plan_args.extend(
-            [
-                "--conda-build-helper",
-                "/mnt/skills/plugins/conda-build/skills/conda-build/scripts/rattler_channel.py",
-            ]
-        )
-    pixi_binary = Path(host_pixi_root) / "bin" / "pixi"
-    bind = f"{pixi_binary}:/opt/host-pixi/bin/pixi:ro"
-    source_binds = []
-    if include_upstream or include_build:
-        for package, source_path in (local_source_paths or {}).items():
-            container_source = f"/mnt/sources/{package}"
-            source_binds.extend(["--bind", f"{source_path}:{container_source}:ro"])
-            plan_args.extend(["--local-source", f"{package}={container_source}"])
-    if include_upstream:
-        plan_args.extend(["--upstream-profile", upstream_profile])
-    plan_args.extend(["--write-manifest", "--format", "json"])
-    runbook_steps = ["--step", "check_channel"]
-    if include_build:
-        runbook_steps.extend(["--step", "build"])
-    runbook_steps.extend(["--step", "install", "--step", "smoke"])
-    if include_upstream:
-        runbook_steps.extend(["--step", "upstream_installed_tests"])
-    runbook_steps.extend(["--step", "audit"])
-    execute_args = [
-        container_python,
-        execute_script,
-        "--manifest",
-        "/tmp/skill-home/monata-env-session/monata-env-install-manifest.json",
-        *runbook_steps,
-        "--allow-confirmation-required",
-        "--format",
-        "json",
-    ]
-    inner = (
-        "cd /mnt/project && "
-        "mkdir -p /tmp/skill-home/monata-env-session && "
-        "{} > /tmp/skill-home/monata-env-session/plan.json && {}".format(
-            command_string(plan_args),
-            command_string(execute_args),
-        )
-    )
-    extra_options = [
-        "--bind",
-        bind,
-        *source_binds,
-        "--prepend-path",
-        "/tmp/skill-home/.pixi/bin",
-        "--prepend-path",
-        "/opt/host-pixi/bin",
-    ]
-    if timeout_seconds:
-        extra_options.extend(["--timeout-seconds", str(timeout_seconds)])
-    command = container_runner_argv(
-        root,
-        output_dir,
-        container_image,
-        helper_script,
-        state_dir,
-        extra_options=extra_options,
-    )
-    command.extend(["--require-command", container_python, "--require-command", "pixi", "--", "bash", "-c", inner])
-    return command_string(command)
 
 
 def decisions(
@@ -1026,18 +808,24 @@ def questions(local_sources):
                 },
             }
         )
-    if any(
-        item["status"] in {"missing", "not-git", "target-ref-missing", "git-unavailable", "unsupported-file"}
-        for item in local_sources.values()
-    ):
+    repair_statuses = {
+        "missing",
+        "not-git",
+        "target-ref-missing",
+        "git-unavailable",
+        "unsupported-file",
+        "submodule-missing",
+    }
+    if any(item["status"] in repair_statuses for item in local_sources.values()):
         problem_sources = {
             package: {
                 "path": item.get("path", ""),
                 "status": item.get("status", ""),
                 "target_ref": item.get("target_ref"),
+                "missing_submodules": item.get("missing_submodules", []),
             }
             for package, item in local_sources.items()
-            if item["status"] in {"missing", "not-git", "target-ref-missing", "git-unavailable", "unsupported-file"}
+            if item["status"] in repair_statuses
         }
         items.append(
             {
@@ -1063,7 +851,13 @@ def create_plan(
     upstream_profile="basic",
     host_pixi_root=None,
     live_timeout_seconds=None,
+    tool_pins_file=None,
 ):
+    tool_pins_path = Path(tool_pins_file).expanduser().resolve() if tool_pins_file else DEFAULT_PINS_FILE
+    tool_pins = load_tool_pins(tool_pins_path)
+    expected_refs = expected_source_refs(tool_pins)
+    package_specs = pixi_package_specs(tool_pins)
+    exposed = exposed_commands(tool_pins)
     detected = detect(root)
     packages = detected["packages"]
     helper_script = resolve_conda_build_helper(conda_build_helper)
@@ -1084,7 +878,7 @@ def create_plan(
     resolved_live_timeout_seconds = live_validation_timeout(upstream_profile, live_timeout_seconds)
     local_source_paths = parse_key_path(local_source_values)
     local_sources = {
-        package: local_source_status(package, path)
+        package: local_source_status(package, path, expected_refs)
         for package, path in local_source_paths.items()
     }
     channel = channel_status(output_dir, packages)
@@ -1102,8 +896,8 @@ def create_plan(
     }
     tools = {
         package: {
-            "command": EXPOSED_COMMANDS.get(package, package),
-            "path": shutil.which(EXPOSED_COMMANDS.get(package, package)),
+            "command": exposed.get(package, package),
+            "path": shutil.which(exposed.get(package, package)),
         }
         for package in packages
     }
@@ -1115,8 +909,10 @@ def create_plan(
     upstream_work_dir = resolved_session_dir / "monata-env-upstream-work"
     commands = {
         "check_channel": check_channel_command(packages, output_dir, helper_script),
-        "build": build_command(build_packages, output_dir, selected_local_sources, helper_script) if build_packages else [],
-        "install": install_command(packages, output_dir, env_name),
+        "build": build_command(build_packages, output_dir, selected_local_sources, helper_script, expected_refs)
+        if build_packages
+        else [],
+        "install": install_command(packages, output_dir, env_name, package_specs, exposed),
         "smoke": [sys.executable, str(SCRIPT_DIR / "smoke_monata_env_tools.py"), "--format", "json"],
         "upstream_installed_tests": upstream_installed_test_command(
             upstream_source_paths,
@@ -1191,6 +987,10 @@ def create_plan(
                 upstream_profile=upstream_profile,
                 timeout_seconds=resolved_live_timeout_seconds,
             ),
+        },
+        "tool_pins": {
+            "path": str(tool_pins_path),
+            "packages": sorted(tool_pins.get("packages", {})),
         },
         "local_sources": local_sources,
         "tools": tools,
@@ -1268,8 +1068,13 @@ def parse_args():
     )
     parser.add_argument(
         "--live-timeout-seconds",
-        type=int,
+        type=positive_int,
         help="Outer timeout for generated isolated live install/build/upstream container commands.",
+    )
+    parser.add_argument(
+        "--tool-pins-file",
+        type=Path,
+        help="Override the maintained circuit-tool pins JSON file used by the planner.",
     )
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
@@ -1339,6 +1144,7 @@ def main():
         upstream_profile=args.upstream_profile,
         host_pixi_root=args.host_pixi_root,
         live_timeout_seconds=args.live_timeout_seconds,
+        tool_pins_file=args.tool_pins_file,
     )
     if args.write_manifest:
         write_manifest_seed(plan, overwrite=args.overwrite_manifest)

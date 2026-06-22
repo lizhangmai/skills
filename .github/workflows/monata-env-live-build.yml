@@ -1,0 +1,107 @@
+name: Monata Env Live Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: Runner label with Singularity and build capacity
+        required: true
+        default: self-hosted
+      root:
+        description: Monata workspace path on the runner
+        required: true
+        default: tests/fixtures/workspaces/monata-basic
+      container_image:
+        description: Singularity image URI or local .sif path
+        required: true
+        default: docker://python:3.12-slim
+      host_pixi_root:
+        description: Host pixi root to bind read-only
+        required: true
+        default: /opt/pixi
+      upstream_profile:
+        description: Upstream installed test profile
+        required: true
+        default: basic
+        type: choice
+        options:
+          - basic
+          - full
+      live_timeout_seconds:
+        description: Outer live container timeout in seconds
+        required: true
+        default: "14400"
+      dry_run:
+        description: Print the generated live command without executing it
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  live-build:
+    name: Live build/install/smoke/upstream validation
+    runs-on: ${{ inputs.runner_label }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Prepare pinned upstream sources
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/monata-env-sources"
+          if [ ! -d "$RUNNER_TEMP/monata-env-sources/klayout/.git" ]; then
+            git clone --depth 1 --branch v0.30.9 https://github.com/KLayout/klayout.git "$RUNNER_TEMP/monata-env-sources/klayout"
+          fi
+          if [ ! -d "$RUNNER_TEMP/monata-env-sources/xschem/.git" ]; then
+            git clone --depth 1 --branch 3.4.7 https://codeberg.org/stef_xschem/xschem.git "$RUNNER_TEMP/monata-env-sources/xschem"
+          fi
+
+      - name: Run live validation
+        id: live
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p reports/monata-env-live-build
+          args=(
+            python plugins/monata-env/skills/monata-env/scripts/run_live_build_validation.py
+            --root "${{ inputs.root }}"
+            --output-dir "$RUNNER_TEMP/monata-env-channel"
+            --session-dir "$RUNNER_TEMP/monata-env-session"
+            --container-state-dir "$RUNNER_TEMP/monata-env-container-state"
+            --container-image "${{ inputs.container_image }}"
+            --live-timeout-seconds "${{ inputs.live_timeout_seconds }}"
+            --upstream-profile "${{ inputs.upstream_profile }}"
+            --local-source "klayout=$RUNNER_TEMP/monata-env-sources/klayout"
+            --local-source "xschem=$RUNNER_TEMP/monata-env-sources/xschem"
+            --overwrite-manifest
+            --format json
+          )
+          args+=(--host-pixi-root "${{ inputs.host_pixi_root }}")
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          "${args[@]}" | tee reports/monata-env-live-build/result.json
+
+      - name: Upload live validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monata-env-live-build-artifacts
+          path: |
+            reports/monata-env-live-build/
+            ${{ runner.temp }}/monata-env-channel/
+            ${{ runner.temp }}/monata-env-session/
+            ${{ runner.temp }}/monata-env-container-state/home/monata-env-session/
+
+      - name: Fail if live validation failed
+        if: steps.live.outcome == 'failure'
+        run: exit 1

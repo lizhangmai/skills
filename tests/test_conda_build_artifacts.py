@@ -77,6 +77,7 @@ def test_pixi_smoke_uses_selected_profile_without_trilinos_for_baseline(tmp_path
         commands.append([str(part) for part in command])
 
     monkeypatch.setattr(module, "run", fake_run)
+    monkeypatch.setattr(module.shutil, "which", lambda command: "/tmp/fake-pixi" if command == "pixi" else None)
     args = module.parse_args(
         [
             "--output-dir",

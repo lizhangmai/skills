@@ -779,17 +779,10 @@ def test_plan_emits_isolated_live_build_upstream_command_with_timeout(tmp_path):
     assert "--step check_channel --step build --step install --step smoke --step upstream_installed_tests --step audit" in build_upstream
 
 
-def test_historical_monata_sim_env_docs_are_marked_superseded():
-    docs = [
-        REPO_ROOT / "docs" / "superpowers" / "specs" / "2026-06-19-monata-env-design.md",
-        REPO_ROOT / "docs" / "superpowers" / "plans" / "2026-06-19-monata-env.md",
-    ]
-    for path in docs:
-        text = path.read_text(encoding="utf-8")
-        assert "monata-sim-env" in text
-        assert "Historical note" in text
-        assert "plugins/monata-env/skills/monata-env/SKILL.md" in text
-        assert "active install runbook" in text
+def test_ignored_superpowers_docs_are_not_required_for_public_ci():
+    gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+
+    assert "docs/superpowers/" in gitignore
 
 
 def test_plan_decisions_recommend_local_sources_and_basic_upstream_profile(tmp_path):

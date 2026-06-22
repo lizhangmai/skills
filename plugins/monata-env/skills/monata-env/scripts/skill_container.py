@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -127,13 +128,96 @@ def preflight_error_code(reason, text):
     return reason
 
 
+def decoded_output(value):
+    if not value:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return str(value)
+
+
+def container_timeout_payload(args, dirs, command, exc):
+    timeout_seconds = args.timeout_seconds
+    return {
+        "ok": False,
+        "reason": "container-command-timeout",
+        "error": {"code": "container-command-timeout"},
+        "returncode": 124,
+        "timeout_seconds": timeout_seconds,
+        "command": [str(part) for part in command],
+        "image": str(args.image),
+        "state_dir": str(dirs["state_dir"]),
+        "home_dir": str(dirs["home_dir"]),
+        "cache_dir": str(dirs["cache_dir"]),
+        "channel_dir": str(dirs["channel_dir"]),
+        "stdout": decoded_output(exc.stdout)[-4000:],
+        "stderr": decoded_output(exc.stderr)[-4000:],
+        "next_actions": [
+            {
+                "id": "inspect-container-timeout-or-cache",
+                "title": "Inspect the timed-out live container run",
+                "requires_user_input": True,
+                "prompt": (
+                    "The isolated live validation command exceeded its outer timeout. "
+                    "Inspect the persisted state/cache/channel directories, check whether the build is still "
+                    "downloading or compiling large dependencies, then retry with a larger --timeout-seconds, "
+                    "a warmer cache, or narrower runbook steps."
+                ),
+            }
+        ],
+    }
+
+
+def terminate_process_group(process):
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=5)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    process.wait()
+
+
+def run_captured_command(command, env, timeout=None):
+    process = subprocess.Popen(
+        command,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        terminate_process_group(process)
+        stdout, stderr = process.communicate()
+        exc.stdout = stdout
+        exc.stderr = stderr
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout=stdout, stderr=stderr)
+
+
 def run_preflight(args, dirs):
     command = build_preflight_command(args, dirs)
     if not command:
         return 0
     env = os.environ.copy()
     env.update(host_env(dirs))
-    result = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    try:
+        result = run_captured_command(command, env=env, timeout=args.timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        print(json.dumps(container_timeout_payload(args, dirs, command, exc), indent=2, sort_keys=True))
+        return 124
     if result.returncode != 0:
         output_text = result.stdout + "\n" + result.stderr
         next_actions = preflight_next_actions(output_text)
@@ -205,6 +289,11 @@ def parse_args():
     )
     parser.add_argument("--dry-run", action="store_true", help="Print the container command as JSON without executing it.")
     parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        help="Maximum seconds for the live container command after preflight. Emits structured JSON and exits 124 on timeout.",
+    )
+    parser.add_argument(
         "--require-command",
         action="append",
         default=[],
@@ -239,6 +328,7 @@ def main():
         "repo_root": str(resolve_path(args.repo_root)),
         "workspace": str(resolve_path(args.workspace)),
         "image": str(args.image),
+        "timeout_seconds": args.timeout_seconds,
     }
 
     if args.dry_run:
@@ -256,8 +346,13 @@ def main():
 
     env = os.environ.copy()
     env.update(host_env(dirs))
-    result = subprocess.run(command, env=env, check=False)
-    return result.returncode
+    try:
+        process = subprocess.Popen(command, env=env, start_new_session=True)
+        return process.wait(timeout=args.timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        terminate_process_group(process)
+        print(json.dumps(container_timeout_payload(args, dirs, command, exc), indent=2, sort_keys=True))
+        return 124
 
 
 if __name__ == "__main__":

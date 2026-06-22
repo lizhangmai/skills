@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -299,6 +300,52 @@ exit 255
     assert data["next_actions"][0]["id"] == "use-local-container-image"
     assert data["next_actions"][0]["requires_user_input"] is True
     assert "local .sif" in data["next_actions"][0]["prompt"]
+
+
+def test_skill_container_times_out_live_command_with_structured_recovery(tmp_path):
+    workspace = tmp_path / "workspace"
+    state_dir = tmp_path / "state"
+    fake_singularity = tmp_path / "singularity"
+    workspace.mkdir()
+    fake_singularity.write_text(
+        """#!/usr/bin/env bash
+sleep 5
+""",
+        encoding="utf-8",
+    )
+    fake_singularity.chmod(0o755)
+
+    start = time.monotonic()
+    result = run(
+        [
+            sys.executable,
+            SCRIPT,
+            "--state-dir",
+            state_dir,
+            "--workspace",
+            workspace,
+            "--singularity-bin",
+            fake_singularity,
+            "--timeout-seconds",
+            "1",
+            "--require-command",
+            "python3",
+            "--",
+            "true",
+        ]
+    )
+    elapsed = time.monotonic() - start
+
+    assert result.returncode == 124
+    assert elapsed < 3
+    data = json.loads(result.stdout)
+    assert data["ok"] is False
+    assert data["reason"] == "container-command-timeout"
+    assert data["error"]["code"] == "container-command-timeout"
+    assert data["timeout_seconds"] == 1
+    assert data["state_dir"] == str(state_dir.resolve())
+    assert data["next_actions"][0]["id"] == "inspect-container-timeout-or-cache"
+    assert data["next_actions"][0]["requires_user_input"] is True
 
 
 def test_monata_env_skill_installs_local_container_runner(tmp_path):

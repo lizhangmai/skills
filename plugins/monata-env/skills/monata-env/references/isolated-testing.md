@@ -56,12 +56,31 @@ When trusted local KLayout/Xschem source checkouts are provided, run
 `/mnt/sources/<package>` and includes the optional `upstream_installed_tests`
 step after smoke.
 
+For the highest-confidence live validation, use
+`commands.build_install_smoke_upstream` after explicit approval. It rebuilds
+missing KLayout/Xschem packages from the bound local sources, installs the
+result into the isolated pixi global environment, runs smoke tests, runs
+upstream-installed tests, and audits the manifest. Prefer this command before
+claiming a recipe/build-flow change is proven end to end.
+
+Use `--live-timeout-seconds` on the planner to tune the outer container
+timeout. The generated plan records `container.live_timeout_seconds` and
+`container.cache_strategy`; the latter names the isolated HOME, pixi home,
+rattler cache, Singularity cache, and Singularity tmp directories under the
+selected `--container-state-dir`.
+
 ## Failure Handling
 
 If the image starts but lacks a required command, the wrapper returns
 `missing-required-commands` and recommends
 `choose-container-with-required-commands`. If pulling `docker://...` fails, it
 can recommend `use-local-container-image`.
+
+If a live container command exceeds its outer timeout, the wrapper returns
+`container-command-timeout` with `inspect-container-timeout-or-cache`. Inspect
+the state/cache/channel directories, check whether a build is still downloading
+or compiling large dependencies, then retry with warmer caches, narrower
+runbook steps, or a larger `--timeout-seconds`.
 
 Use `bash -c`, not `bash -lc`, when relying on `--prepend-path`; login shells
 may reset PATH and hide the bound pixi binary.

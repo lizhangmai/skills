@@ -259,10 +259,21 @@ user provides a local `.sif`. The wrapper isolates image/cache state with
 `SINGULARITY_CACHEDIR` and `SINGULARITY_TMPDIR`.
 
 Planner options include `--container-image`, `--session-dir`,
-`--container-state-dir`, `--test-image-output`, `--host-pixi-root`, and
-`--conda-build-helper`. Generated isolation choices include `test_image`,
-`prepare_dedicated`, `remote_prepare_command`, `host_pixi_bind`,
-`commands.install_smoke`, and `commands.install_smoke_upstream`.
+`--container-state-dir`, `--test-image-output`, `--host-pixi-root`,
+`--conda-build-helper`, and `--live-timeout-seconds`. Generated isolation
+choices include `test_image`, `prepare_dedicated`, `remote_prepare_command`,
+`host_pixi_bind`, `commands.install_smoke`,
+`commands.install_smoke_upstream`, and
+`commands.build_install_smoke_upstream`. Use the build+upstream command only
+after the user approves a live container build; it runs `check_channel`,
+`build`, `install`, `smoke`, `upstream_installed_tests`, and `audit` inside
+the isolated state.
+
+The plan's `container.cache_strategy` and `container.live_timeout_seconds`
+describe where HOME, pixi, rattler, Singularity cache/tmp, and the outer
+wrapper timeout live. Timeout failures return `container-command-timeout`; use
+that `next_actions` item to inspect caches/logs, warm the cache, narrow steps,
+or retry with a larger timeout.
 
 The dedicated image path uses `scripts/prepare_monata_env_test_image.py`; it
 expects python3, git, and pixi. If local Singularity build fails with `fakeroot`

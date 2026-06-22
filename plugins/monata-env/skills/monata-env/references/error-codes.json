@@ -6,6 +6,11 @@
       "producer": "execute_monata_env_runbook.py or helper command output",
       "recovery": "Re-run the planner with a valid --conda-build-helper path or refresh the helper checkout."
     },
+    "container-command-timeout": {
+      "description": "The outer isolated Singularity live validation command exceeded its configured timeout.",
+      "producer": "skill_container.py",
+      "recovery": "Inspect the isolated state/cache/channel directories, warm caches or narrow steps, then retry with a larger --timeout-seconds if appropriate."
+    },
     "helper-missing": {
       "description": "A generic setup helper required by the runbook is unavailable.",
       "producer": "execute_monata_env_runbook.py or helper command output",

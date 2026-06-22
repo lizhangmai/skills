@@ -1112,6 +1112,72 @@ def test_plan_decisions_can_emit_isolated_upstream_installed_command(tmp_path):
     assert data["container"]["live_install_smoke_upstream_command"] == upstream
 
 
+def test_plan_emits_isolated_live_build_upstream_command_with_timeout(tmp_path):
+    workspace = tmp_path / "workspace"
+    output_dir = tmp_path / "channel"
+    session_dir = tmp_path / "session"
+    image = tmp_path / "monata-env-python.sif"
+    host_pixi_root = tmp_path / "host-pixi"
+    klayout_source = tmp_path / "klayout"
+    xschem_source = tmp_path / "xschem"
+    write_monata_workspace(workspace)
+    write_channel_artifacts(output_dir, ["ngspice", "openvaf-r"])
+    image.write_text("sif", encoding="utf-8")
+    (host_pixi_root / "bin").mkdir(parents=True)
+    git_repo_with_tagged_parent(klayout_source, "v0.30.9")
+    git_repo_with_tagged_parent(xschem_source, "3.4.7")
+    run(["git", "-C", klayout_source, "checkout", "--detach", "v0.30.9"])
+    run(["git", "-C", xschem_source, "checkout", "--detach", "3.4.7"])
+
+    result = run(
+        [
+            sys.executable,
+            PLAN_SCRIPT,
+            "--root",
+            workspace,
+            "--output-dir",
+            output_dir,
+            "--session-dir",
+            session_dir,
+            "--container-image",
+            image,
+            "--host-pixi-root",
+            host_pixi_root,
+            "--live-timeout-seconds",
+            "12345",
+            "--local-source",
+            f"klayout={klayout_source}",
+            "--local-source",
+            f"xschem={xschem_source}",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result.returncode == 0, result.stdout
+    data = json.loads(result.stdout)
+    decisions = {decision["id"]: decision for decision in data["decisions"]}
+    singularity = {option["id"]: option for option in decisions["test_isolation"]["options"]}["singularity"]
+    build_upstream = singularity["commands"]["build_install_smoke_upstream"]
+    assert data["build_packages"] == ["klayout", "xschem"]
+    assert data["container"]["live_timeout_seconds"] == 12345
+    assert data["container"]["live_build_install_smoke_upstream_command"] == build_upstream
+    assert data["container"]["cache_strategy"]["state_dir"] == str(session_dir.resolve() / "container-state")
+    assert data["container"]["cache_strategy"]["singularity_cache_dir"].endswith("container-state/singularity-cache")
+    build_command = " ".join(data["commands"]["build"])
+    assert "--package klayout" in build_command
+    assert "--package xschem" in build_command
+    assert "--local-source-ref klayout=v0.30.9" in build_command
+    assert "--local-source-ref xschem=3.4.7" in build_command
+    assert f"--state-dir {session_dir.resolve() / 'container-state'}" in build_upstream
+    assert "--timeout-seconds 12345" in build_upstream
+    assert f"--bind {klayout_source.resolve()}:/mnt/sources/klayout:ro" in build_upstream
+    assert f"--bind {xschem_source.resolve()}:/mnt/sources/xschem:ro" in build_upstream
+    assert "--local-source klayout=/mnt/sources/klayout" in build_upstream
+    assert "--local-source xschem=/mnt/sources/xschem" in build_upstream
+    assert "--step check_channel --step build --step install --step smoke --step upstream_installed_tests --step audit" in build_upstream
+
+
 def test_container_upstream_command_quotes_paths_with_spaces(tmp_path):
     workspace = tmp_path / "workspace with spaces"
     output_dir = tmp_path / "channel with spaces"

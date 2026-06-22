@@ -33,6 +33,10 @@ EXPOSED_COMMANDS = {
 CACHED_SKILLS_ROOT = Path.home() / ".cache" / "monata-env" / "skills"
 DEFAULT_CONTAINER_IMAGE = "docker://python:3.12-slim"
 DEFAULT_CONTAINER_STATE_DIR = Path("/tmp/monata-env-skill-test")
+DEFAULT_LIVE_TIMEOUT_SECONDS = {
+    "basic": 14400,
+    "full": 21600,
+}
 TEST_IMAGE_REQUIRED_COMMANDS = ["/usr/local/bin/python3", "git", "pixi"]
 SOURCE_ARCHIVE_SUFFIXES = (
     ".tar",
@@ -69,6 +73,24 @@ def default_test_image_output(session_dir, container_state_dir):
     if session_dir:
         return Path(session_dir) / "monata-env-test.sif"
     return Path(container_state_dir) / "monata-env-test.sif"
+
+
+def live_validation_timeout(upstream_profile, value=None):
+    if value is not None:
+        return int(value)
+    return DEFAULT_LIVE_TIMEOUT_SECONDS[upstream_profile]
+
+
+def container_cache_strategy(state_dir):
+    state = Path(state_dir)
+    return {
+        "state_dir": str(state),
+        "home_dir": str(state / "home"),
+        "pixi_home": str(state / "home" / ".pixi"),
+        "rattler_cache_dir": str(state / "home" / ".cache" / "rattler"),
+        "singularity_cache_dir": str(state / "singularity-cache"),
+        "singularity_tmp_dir": str(state / "singularity-tmp"),
+    }
 
 
 def find_skills_repo_root(helper_script):
@@ -632,8 +654,10 @@ def container_install_smoke_command(
     state_dir,
     env_name="monata-env",
     local_source_paths=None,
+    include_build=False,
     include_upstream=False,
     upstream_profile="basic",
+    timeout_seconds=None,
 ):
     if not host_pixi_root:
         return ""
@@ -669,14 +693,18 @@ def container_install_smoke_command(
     pixi_binary = Path(host_pixi_root) / "bin" / "pixi"
     bind = f"{pixi_binary}:/opt/host-pixi/bin/pixi:ro"
     source_binds = []
-    if include_upstream:
+    if include_upstream or include_build:
         for package, source_path in (local_source_paths or {}).items():
             container_source = f"/mnt/sources/{package}"
             source_binds.extend(["--bind", f"{source_path}:{container_source}:ro"])
             plan_args.extend(["--local-source", f"{package}={container_source}"])
+    if include_upstream:
         plan_args.extend(["--upstream-profile", upstream_profile])
     plan_args.extend(["--write-manifest", "--format", "json"])
-    runbook_steps = ["--step", "check_channel", "--step", "install", "--step", "smoke"]
+    runbook_steps = ["--step", "check_channel"]
+    if include_build:
+        runbook_steps.extend(["--step", "build"])
+    runbook_steps.extend(["--step", "install", "--step", "smoke"])
     if include_upstream:
         runbook_steps.extend(["--step", "upstream_installed_tests"])
     runbook_steps.extend(["--step", "audit"])
@@ -698,21 +726,24 @@ def container_install_smoke_command(
             command_string(execute_args),
         )
     )
+    extra_options = [
+        "--bind",
+        bind,
+        *source_binds,
+        "--prepend-path",
+        "/tmp/skill-home/.pixi/bin",
+        "--prepend-path",
+        "/opt/host-pixi/bin",
+    ]
+    if timeout_seconds:
+        extra_options.extend(["--timeout-seconds", str(timeout_seconds)])
     command = container_runner_argv(
         root,
         output_dir,
         container_image,
         helper_script,
         state_dir,
-        extra_options=[
-            "--bind",
-            bind,
-            *source_binds,
-            "--prepend-path",
-            "/tmp/skill-home/.pixi/bin",
-            "--prepend-path",
-            "/opt/host-pixi/bin",
-        ],
+        extra_options=extra_options,
     )
     command.extend(["--require-command", container_python, "--require-command", "pixi", "--", "bash", "-c", inner])
     return command_string(command)
@@ -731,6 +762,7 @@ def decisions(
     test_image,
     env_name,
     upstream_profile,
+    live_timeout_seconds,
     host_pixi_root=None,
 ):
     source_paths = {package: str(path) for package, path in local_source_paths.items()}
@@ -759,6 +791,7 @@ def decisions(
         host_pixi_root,
         container_state_dir,
         env_name=env_name,
+        timeout_seconds=live_timeout_seconds,
     )
     if live_install_command:
         isolated_commands["install_smoke"] = live_install_command
@@ -773,9 +806,26 @@ def decisions(
         local_source_paths=upstream_source_paths,
         include_upstream=bool(upstream_source_paths),
         upstream_profile=upstream_profile,
+        timeout_seconds=live_timeout_seconds,
     )
     if live_upstream_command:
         isolated_commands["install_smoke_upstream"] = live_upstream_command
+    live_build_upstream_command = container_install_smoke_command(
+        root,
+        output_dir,
+        container_image,
+        helper_script,
+        host_pixi_root,
+        container_state_dir,
+        env_name=env_name,
+        local_source_paths=upstream_source_paths,
+        include_build=bool(build_needed and upstream_source_paths),
+        include_upstream=bool(upstream_source_paths),
+        upstream_profile=upstream_profile,
+        timeout_seconds=live_timeout_seconds,
+    )
+    if live_build_upstream_command and build_needed and upstream_source_paths:
+        isolated_commands["build_install_smoke_upstream"] = live_build_upstream_command
     return [
         {
             "id": "global_environment",
@@ -1012,6 +1062,7 @@ def create_plan(
     test_image_output=None,
     upstream_profile="basic",
     host_pixi_root=None,
+    live_timeout_seconds=None,
 ):
     detected = detect(root)
     packages = detected["packages"]
@@ -1030,6 +1081,7 @@ def create_plan(
         else default_test_image_output(resolved_session_dir if session_dir else None, resolved_container_state_dir).resolve()
     )
     resolved_host_pixi_root = Path(host_pixi_root).expanduser().resolve() if host_pixi_root else None
+    resolved_live_timeout_seconds = live_validation_timeout(upstream_profile, live_timeout_seconds)
     local_source_paths = parse_key_path(local_source_values)
     local_sources = {
         package: local_source_status(package, path)
@@ -1098,6 +1150,8 @@ def create_plan(
         "container": {
             "image": resolved_container_image,
             "state_dir": str(resolved_container_state_dir),
+            "cache_strategy": container_cache_strategy(resolved_container_state_dir),
+            "live_timeout_seconds": resolved_live_timeout_seconds,
             "host_pixi_root": str(resolved_host_pixi_root) if resolved_host_pixi_root else "",
             "test_image": test_image,
             "live_install_smoke_command": container_install_smoke_command(
@@ -1108,6 +1162,7 @@ def create_plan(
                 resolved_host_pixi_root,
                 resolved_container_state_dir,
                 env_name=env_name,
+                timeout_seconds=resolved_live_timeout_seconds,
             ),
             "live_install_smoke_upstream_command": container_install_smoke_command(
                 root,
@@ -1120,6 +1175,21 @@ def create_plan(
                 local_source_paths=upstream_source_paths,
                 include_upstream=bool(upstream_source_paths),
                 upstream_profile=upstream_profile,
+                timeout_seconds=resolved_live_timeout_seconds,
+            ),
+            "live_build_install_smoke_upstream_command": container_install_smoke_command(
+                root,
+                output_dir,
+                resolved_container_image,
+                helper_script,
+                resolved_host_pixi_root,
+                resolved_container_state_dir,
+                env_name=env_name,
+                local_source_paths=upstream_source_paths,
+                include_build=bool(build_packages and upstream_source_paths),
+                include_upstream=bool(upstream_source_paths),
+                upstream_profile=upstream_profile,
+                timeout_seconds=resolved_live_timeout_seconds,
             ),
         },
         "local_sources": local_sources,
@@ -1142,6 +1212,7 @@ def create_plan(
             test_image,
             env_name,
             upstream_profile,
+            resolved_live_timeout_seconds,
             resolved_host_pixi_root,
         ),
         "commands": commands,
@@ -1194,6 +1265,11 @@ def parse_args():
         choices=("basic", "full"),
         default="basic",
         help="Upstream-installed test profile to plan when local sources are provided.",
+    )
+    parser.add_argument(
+        "--live-timeout-seconds",
+        type=int,
+        help="Outer timeout for generated isolated live install/build/upstream container commands.",
     )
     parser.add_argument("--format", choices=("json", "summary"), default="json")
     parser.add_argument("--write-manifest", action="store_true", help="Write a manifest seed next to the output channel.")
@@ -1262,6 +1338,7 @@ def main():
         test_image_output=args.test_image_output,
         upstream_profile=args.upstream_profile,
         host_pixi_root=args.host_pixi_root,
+        live_timeout_seconds=args.live_timeout_seconds,
     )
     if args.write_manifest:
         write_manifest_seed(plan, overwrite=args.overwrite_manifest)
